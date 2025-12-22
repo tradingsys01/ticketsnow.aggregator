@@ -81,14 +81,15 @@ export function normalizeEvent(bravoEvent: BravoEvent) {
   // Try to get venue and city from seances if available
   let venue = 'לא צוין'
   let city = 'לא צוין'
-  let ticketUrl = ''
 
   if (bravoEvent.Seances && Array.isArray(bravoEvent.Seances) && bravoEvent.Seances.length > 0) {
     const firstSeance = bravoEvent.Seances[0]
     venue = firstSeance.Hall || firstSeance.hall || venue
     city = firstSeance.City || firstSeance.city || city
-    ticketUrl = firstSeance.url || firstSeance.URL || ''
   }
+
+  // Use correct Bravo URL format: /announce/{eventId}
+  const ticketUrl = `https://bravo.ticketsnow.co.il/announce/${bravoEvent.id}`
 
   return {
     externalId: String(bravoEvent.id),
@@ -103,7 +104,7 @@ export function normalizeEvent(bravoEvent: BravoEvent) {
     minPrice: bravoEvent.priceMin !== undefined ? Number(bravoEvent.priceMin) : null,
     maxPrice: bravoEvent.priceMax !== undefined ? Number(bravoEvent.priceMax) : null,
     imageUrl: bravoEvent.image || bravoEvent.imageUrl || null,
-    ticketUrl: ticketUrl || `https://bravo.ticketsnow.co.il/show/${bravoEvent.id}`,
+    ticketUrl: ticketUrl,
     performerName: bravoEvent.performerName || null,
     isKidsEvent: true,
     lastSynced: new Date()
@@ -259,4 +260,142 @@ export async function getUpcomingEventsCount() {
       }
     }
   })
+}
+
+/**
+ * Search events with pagination and filters
+ */
+export async function searchEvents(
+  query: string = '',
+  limit: number = 20,
+  offset: number = 0,
+  city: string = '',
+  dateFilter: string = ''
+) {
+  const now = new Date()
+  const searchTerms = query.trim().toLowerCase()
+
+  // Build date filter
+  let dateFrom = now
+  let dateTo: Date | undefined = undefined
+
+  if (dateFilter === 'today') {
+    dateTo = new Date(now)
+    dateTo.setHours(23, 59, 59, 999)
+  } else if (dateFilter === 'week') {
+    dateTo = new Date(now)
+    dateTo.setDate(dateTo.getDate() + 7)
+  } else if (dateFilter === 'month') {
+    dateTo = new Date(now)
+    dateTo.setMonth(dateTo.getMonth() + 1)
+  } else if (dateFilter === '3months') {
+    dateTo = new Date(now)
+    dateTo.setMonth(dateTo.getMonth() + 3)
+  }
+
+  // Build where clause
+  const where: any = {
+    isKidsEvent: true,
+    date: dateTo ? { gte: dateFrom, lte: dateTo } : { gte: dateFrom }
+  }
+
+  // Add city filter
+  if (city) {
+    where.city = city
+  }
+
+  // Add search terms
+  if (searchTerms) {
+    where.OR = [
+      { name: { contains: searchTerms } },
+      { venue: { contains: searchTerms } },
+      { city: { contains: searchTerms } },
+      { performerName: { contains: searchTerms } },
+      { category: { contains: searchTerms } }
+    ]
+  }
+
+  return await prisma.event.findMany({
+    where,
+    orderBy: { date: 'asc' },
+    take: limit,
+    skip: offset
+  })
+}
+
+/**
+ * Get count of search results with filters
+ */
+export async function getSearchResultsCount(
+  query: string = '',
+  city: string = '',
+  dateFilter: string = ''
+) {
+  const now = new Date()
+  const searchTerms = query.trim().toLowerCase()
+
+  // Build date filter
+  let dateFrom = now
+  let dateTo: Date | undefined = undefined
+
+  if (dateFilter === 'today') {
+    dateTo = new Date(now)
+    dateTo.setHours(23, 59, 59, 999)
+  } else if (dateFilter === 'week') {
+    dateTo = new Date(now)
+    dateTo.setDate(dateTo.getDate() + 7)
+  } else if (dateFilter === 'month') {
+    dateTo = new Date(now)
+    dateTo.setMonth(dateTo.getMonth() + 1)
+  } else if (dateFilter === '3months') {
+    dateTo = new Date(now)
+    dateTo.setMonth(dateTo.getMonth() + 3)
+  }
+
+  // Build where clause
+  const where: any = {
+    isKidsEvent: true,
+    date: dateTo ? { gte: dateFrom, lte: dateTo } : { gte: dateFrom }
+  }
+
+  // Add city filter
+  if (city) {
+    where.city = city
+  }
+
+  // Add search terms
+  if (searchTerms) {
+    where.OR = [
+      { name: { contains: searchTerms } },
+      { venue: { contains: searchTerms } },
+      { city: { contains: searchTerms } },
+      { performerName: { contains: searchTerms } },
+      { category: { contains: searchTerms } }
+    ]
+  }
+
+  return await prisma.event.count({ where })
+}
+
+/**
+ * Get unique cities from upcoming events
+ */
+export async function getUniqueCities() {
+  const now = new Date()
+
+  const events = await prisma.event.findMany({
+    where: {
+      isKidsEvent: true,
+      date: { gte: now }
+    },
+    select: {
+      city: true
+    },
+    distinct: ['city'],
+    orderBy: {
+      city: 'asc'
+    }
+  })
+
+  return events.map(e => e.city).filter(city => city !== 'לא צוין')
 }
