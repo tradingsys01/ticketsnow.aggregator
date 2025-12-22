@@ -1,0 +1,95 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id              String   @id @default(cuid())
+  externalId      String   @unique
+  name            String
+  slug            String   @unique
+  description     String?
+  category        String
+  date            DateTime
+  time            String?
+  venue           String
+  city            String
+  minPrice        Float?
+  maxPrice        Float?
+  imageUrl        String?
+  ticketUrl       String
+  performerName   String?
+  isKidsEvent     Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastSynced      DateTime @default(now())
+
+  competitors     CompetitorMatch[]
+  youtubeVideos   YouTubeVideo[]
+
+  @@index([category])
+  @@index([date])
+  @@index([isKidsEvent])
+}
+
+model CompetitorMatch {
+  id              String   @id @default(cuid())
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  competitorName  String
+  competitorUrl   String
+  matchScore      Float
+
+  checkedAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  @@unique([eventId, competitorName])
+  @@index([eventId])
+  @@index([expiresAt])
+}
+
+model YouTubeVideo {
+  id              String   @id @default(cuid())
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  videoId         String
+  title           String
+  thumbnailUrl    String
+  channelTitle    String
+
+  checkedAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  @@unique([eventId, videoId])
+  @@index([eventId])
+}
+
+model SearchLog {
+  id              String   @id @default(cuid())
+  date            DateTime @default(now())
+  queryType       String
+  queriesUsed     Int
+
+  @@index([date])
+}
+
+model SyncLog {
+  id              String   @id @default(cuid())
+  syncedAt        DateTime @default(now())
+  eventsTotal     Int
+  eventsNew       Int
+  eventsUpdated   Int
+  eventsRemoved   Int
+  status          String
+  errorMessage    String?
+}
