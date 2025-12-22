@@ -26,11 +26,18 @@ export default async function CompetitorLinks({ eventId, eventName }: Competitor
       }
     })
 
-    competitors = matches.map(match => ({
-      name: match.competitorName,
-      url: match.competitorUrl,
-      matchScore: match.matchScore
-    }))
+    competitors = matches
+      .filter(match => {
+        // Filter out YouTicket
+        const name = match.competitorName.toLowerCase()
+        const url = match.competitorUrl.toLowerCase()
+        return !name.includes('youticket') && !url.includes('youticket')
+      })
+      .map(match => ({
+        name: match.competitorName,
+        url: match.competitorUrl,
+        matchScore: match.matchScore
+      }))
   } catch (error) {
     console.error('Failed to fetch competitors:', error)
   }
