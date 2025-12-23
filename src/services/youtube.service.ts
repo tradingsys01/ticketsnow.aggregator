@@ -7,6 +7,7 @@ import * as path from 'path'
 
 const GOOGLE_SERVICE_ACCOUNT_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_PATH
 const CACHE_DURATION_HOURS = 24
+const PRIMARY_CHANNEL_HANDLE = '@ticketsnowcoil' // Primary channel to search first
 
 // Initialize Google Auth
 let googleAuth: GoogleAuth | null = null
@@ -37,9 +38,40 @@ interface YouTubeVideo {
 }
 
 /**
- * Search YouTube for videos
+ * Get channel ID from channel handle
  */
-export async function searchYouTube(query: string): Promise<YouTubeVideo[]> {
+async function getChannelIdFromHandle(handle: string): Promise<string | null> {
+  try {
+    const auth = getGoogleAuth()
+    const authClient = await auth.getClient()
+    const youtube = google.youtube({
+      version: 'v3',
+      auth: authClient as any
+    })
+
+    // Search for the channel
+    const response = await youtube.search.list({
+      part: ['snippet'],
+      q: handle,
+      type: ['channel'],
+      maxResults: 1
+    })
+
+    if (response.data.items && response.data.items.length > 0) {
+      return response.data.items[0].id?.channelId || null
+    }
+
+    return null
+  } catch (error) {
+    console.error(`Error getting channel ID for ${handle}:`, error)
+    return null
+  }
+}
+
+/**
+ * Search YouTube for videos (optionally within a specific channel)
+ */
+export async function searchYouTube(query: string, channelId?: string): Promise<YouTubeVideo[]> {
   try {
     // Get authenticated client
     const auth = getGoogleAuth()
@@ -51,8 +83,8 @@ export async function searchYouTube(query: string): Promise<YouTubeVideo[]> {
       auth: authClient as any
     })
 
-    // Search for videos
-    const response = await youtube.search.list({
+    // Build search parameters
+    const searchParams: any = {
       part: ['snippet'],
       q: query,
       type: ['video'],
@@ -61,7 +93,15 @@ export async function searchYouTube(query: string): Promise<YouTubeVideo[]> {
       videoDuration: 'medium', // 4-20 minutes
       relevanceLanguage: 'he',
       safeSearch: 'strict'
-    })
+    }
+
+    // Add channel filter if provided
+    if (channelId) {
+      searchParams.channelId = channelId
+    }
+
+    // Search for videos
+    const response = await youtube.search.list(searchParams)
 
     if (!response.data.items) {
       return []
@@ -77,6 +117,38 @@ export async function searchYouTube(query: string): Promise<YouTubeVideo[]> {
   } catch (error) {
     console.error('Error searching YouTube:', error)
     throw error
+  }
+}
+
+/**
+ * Search YouTube with channel priority (primary channel first, then fallback to general search)
+ */
+export async function searchYouTubeWithFallback(query: string): Promise<YouTubeVideo[]> {
+  try {
+    // First, try to get videos from the primary channel
+    console.log(`Searching ${PRIMARY_CHANNEL_HANDLE} for: ${query}`)
+    const channelId = await getChannelIdFromHandle(PRIMARY_CHANNEL_HANDLE)
+
+    if (channelId) {
+      const channelVideos = await searchYouTube(query, channelId)
+
+      if (channelVideos.length > 0) {
+        console.log(`Found ${channelVideos.length} videos on ${PRIMARY_CHANNEL_HANDLE}`)
+        return channelVideos
+      }
+    }
+
+    // Fallback to general YouTube search
+    console.log('No videos found on primary channel, falling back to general YouTube search')
+    const generalVideos = await searchYouTube(query)
+    console.log(`Found ${generalVideos.length} videos in general search`)
+
+    return generalVideos
+
+  } catch (error) {
+    console.error('Error in searchYouTubeWithFallback:', error)
+    // If all fails, try basic search
+    return searchYouTube(query)
   }
 }
 
@@ -169,8 +241,8 @@ export async function findEventVideos(event: Event): Promise<YouTubeVideo[]> {
     'הצגה ילדים'
   ].filter(Boolean).join(' ')
 
-  // Search YouTube
-  const allVideos = await searchYouTube(searchTerms)
+  // Search YouTube (primary channel first, then fallback to general search)
+  const allVideos = await searchYouTubeWithFallback(searchTerms)
 
   // Filter relevant videos
   const relevantVideos = filterRelevantVideos(allVideos, event)

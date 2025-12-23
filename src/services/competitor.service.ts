@@ -32,10 +32,10 @@ function getGoogleAuth(): GoogleAuth {
 
 // Competitor sites to search
 const COMPETITORS = [
-  { name: 'Ticketsi', domain: 'ticketsi.co.il' },
-  { name: 'Leaan', domain: 'leaan.co.il' },
+  { name: 'Ticketmaster', domain: 'ticketmaster.co.il' },
+  { name: 'Eventim', domain: 'eventim.co.il' },
   { name: 'Eventer', domain: 'eventer.co.il' },
-  { name: 'Youticket', domain: 'youticket.co.il' }
+  { name: 'Leaan', domain: 'leaan.co.il' }
 ]
 
 interface SearchResult {
