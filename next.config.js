@@ -1,7 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['bravo.ticketsnow.co.il', 'bravo.israelinfo.co.il'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'bravo.ticketsnow.co.il',
+      },
+      {
+        protocol: 'https',
+        hostname: 'bravo.israelinfo.co.il',
+      },
+      {
+        protocol: 'https',
+        hostname: 'yt3.ggpht.com',
+      },
+    ],
   },
 }
 

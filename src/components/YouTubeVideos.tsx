@@ -1,9 +1,14 @@
 import prisma from '@/lib/db'
+import VideoComments from './VideoComments'
+import { Suspense } from 'react'
 
 interface YouTubeVideosProps {
   eventId: string
   eventName: string
 }
+
+// Primary channel name to match for showing comments
+const PRIMARY_CHANNEL_NAME = 'כרטיסים עכשיו'
 
 export default async function YouTubeVideos({ eventId, eventName }: YouTubeVideosProps) {
   // Fetch YouTube videos directly from database
@@ -87,6 +92,22 @@ export default async function YouTubeVideos({ eventId, eventName }: YouTubeVideo
       <p className="text-xs text-gray-500 mt-4 text-center">
         הסרטונים מ-YouTube ומוצגים למטרות מידע בלבד
       </p>
+
+      {/* Comments for first video - only if from primary channel */}
+      {videos.length > 0 && videos[0].channelTitle.includes(PRIMARY_CHANNEL_NAME) && (
+        <Suspense
+          fallback={
+            <div className="bg-white rounded-2xl shadow-lg p-6 border-4 border-blue-200 mt-4">
+              <div className="animate-pulse">
+                <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            </div>
+          }
+        >
+          <VideoComments videoId={videos[0].videoId} />
+        </Suspense>
+      )}
     </section>
   )
 }
