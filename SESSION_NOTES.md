@@ -341,9 +341,101 @@ curl http://localhost:3000/api/comments/E-KYojFqglU
 
 ---
 
+---
+
+## UPDATE: Frontend Comments Component - December 23, 2025
+
+### ✅ YouTube Comments Frontend Component COMPLETED
+
+**Status**: Fully implemented and integrated ✅
+
+#### What Was Added
+
+**1. VideoComments Component** (`src/components/VideoComments.tsx`)
+- Server-side React component that fetches comments from database
+- Features:
+  - Displays author profile pictures (from YouTube)
+  - Shows author names, comment text, like counts
+  - Relative timestamps in Hebrew (e.g., "לפני יומיים")
+  - Nested reply threading with visual indentation
+  - Top-level comments in gray background
+  - Replies in blue background with smaller avatars
+  - RTL-friendly styling with Tailwind CSS
+  - Graceful handling of missing profile pictures (gradient avatars with initials)
+
+**2. Integration with YouTubeVideos Component**
+- Modified `src/components/YouTubeVideos.tsx`
+- Comments shown ONLY for videos from primary channel "כרטיסים עכשיו"
+- Added check: `videos[0].channelTitle.includes(PRIMARY_CHANNEL_NAME)`
+- Wrapped in Suspense boundary with loading fallback
+- Displays comments below the video grid
+
+**3. Next.js Configuration Update**
+- Updated `next.config.js` to allow YouTube profile images
+- Migrated from deprecated `images.domains` to `images.remotePatterns`
+- Added hostname: `yt3.ggpht.com` for YouTube profile pictures
+- This fixes the "Invalid src prop" error
+
+#### Component Features
+
+**Comment Display**:
+- 10 top-level comments maximum (from API)
+- All replies to each comment shown
+- Like counts formatted (1000+ → 1K)
+- Hebrew relative date formatting
+- Profile pictures with fallback to gradient avatars
+
+**Channel Filtering**:
+- Comments only show if video is from "@ticketsnowcoil" channel
+- Channel name check: "כרטיסים עכשיו"
+- Other channels' videos don't show comments section
+
+**Styling**:
+- Consistent with existing site design (rounded-2xl, shadow-lg, border-4)
+- Blue border to match comment theme
+- RTL layout with proper Hebrew text alignment
+- Responsive design with proper spacing
+
+#### Files Modified
+
+**Created**:
+- `src/components/VideoComments.tsx` - Main comments component (190 lines)
+
+**Modified**:
+- `src/components/YouTubeVideos.tsx` - Added VideoComments integration
+- `next.config.js` - Updated image configuration
+
+#### Testing Results
+
+- ✅ Comments display correctly on event pages
+- ✅ Profile pictures load from YouTube
+- ✅ Reply threading works properly
+- ✅ Hebrew timestamps display correctly
+- ✅ Like counts format properly
+- ✅ Only shows for primary channel videos
+- ✅ Graceful fallback for missing profile pictures
+
+#### Next Steps
+
+**Complete** - No further work needed for comments feature:
+- ✅ Backend API implemented
+- ✅ Database schema created
+- ✅ OAuth2 authentication configured
+- ✅ Frontend component created
+- ✅ Integration completed
+- ✅ Image configuration updated
+
+**For Next Agent**:
+- Feature is production-ready
+- Comments refresh every 3 days automatically
+- Monitor cache performance after deployment
+- Consider adding "load more" pagination if comment volume increases
+
+---
+
 **Session Completed**: December 23, 2025
 **Next Sync**: December 23, 2025 02:00 UTC
 **Configuration Active**:
 - New competitors (Ticketmaster, Eventim, Eventer, Leaan)
 - YouTube channel priority (@ticketsnowcoil)
-- YouTube comments with OAuth2
+- YouTube comments with OAuth2 (backend + frontend COMPLETE)
