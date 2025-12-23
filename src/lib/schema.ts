@@ -130,7 +130,8 @@ export function generateOrganizationSchema() {
       addressCountry: 'IL'
     },
     sameAs: [
-      // Add social media links when available
+      'https://www.facebook.com/profile.php?id=100066977252854',
+      'https://www.youtube.com/@ticketsnowcoil'
     ]
   }
 }

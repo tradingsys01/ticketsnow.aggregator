@@ -54,10 +54,24 @@ export default function Footer() {
               <span className="text-2xl">📧</span>
               יצירת קשר
             </h3>
-            <p className="text-white/90 text-sm">
+            <p className="text-white/90 text-sm mb-3">
               kids.ticketsnow.co.il
             </p>
-            <p className="text-white/70 text-xs mt-2">
+
+            {/* Social Media */}
+            <div className="mb-3">
+              <a
+                href="https://www.facebook.com/profile.php?id=100066977252854"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-4 py-2 transition-all text-sm"
+              >
+                <span className="text-xl">👍</span>
+                עקבו אחרינו בפייסבוק
+              </a>
+            </div>
+
+            <p className="text-white/70 text-xs">
               המידע באתר מסופק כשירות ללקוחות
             </p>
           </div>
