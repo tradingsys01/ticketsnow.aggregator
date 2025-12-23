@@ -28,6 +28,7 @@ yarn-error.log*
 
 # google credentials
 google-service-account.json
+client_secret.json
 
 # vercel
 .vercel

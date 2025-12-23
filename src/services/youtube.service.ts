@@ -9,8 +9,15 @@ const GOOGLE_SERVICE_ACCOUNT_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_PATH
 const CACHE_DURATION_HOURS = 24
 const PRIMARY_CHANNEL_HANDLE = '@ticketsnowcoil' // Primary channel to search first
 
+// OAuth2 credentials for YouTube comments
+const YOUTUBE_OAUTH_CLIENT_ID = process.env.YOUTUBE_OAUTH_CLIENT_ID
+const YOUTUBE_OAUTH_CLIENT_SECRET = process.env.YOUTUBE_OAUTH_CLIENT_SECRET
+const YOUTUBE_OAUTH_REDIRECT_URI = process.env.YOUTUBE_OAUTH_REDIRECT_URI
+const YOUTUBE_OAUTH_REFRESH_TOKEN = process.env.YOUTUBE_OAUTH_REFRESH_TOKEN
+
 // Initialize Google Auth
 let googleAuth: GoogleAuth | null = null
+let oauth2Client: any = null
 
 function getGoogleAuth(): GoogleAuth {
   if (!googleAuth) {
@@ -28,6 +35,33 @@ function getGoogleAuth(): GoogleAuth {
     }
   }
   return googleAuth
+}
+
+/**
+ * Get OAuth2 client for YouTube comments
+ * Comments require OAuth2, not service account
+ */
+function getOAuth2Client() {
+  if (!oauth2Client) {
+    if (!YOUTUBE_OAUTH_CLIENT_ID || !YOUTUBE_OAUTH_CLIENT_SECRET || !YOUTUBE_OAUTH_REFRESH_TOKEN) {
+      throw new Error('YouTube OAuth2 credentials not configured. Run: node scripts/generate-youtube-token.js')
+    }
+
+    const { OAuth2Client } = require('google-auth-library')
+
+    oauth2Client = new OAuth2Client(
+      YOUTUBE_OAUTH_CLIENT_ID,
+      YOUTUBE_OAUTH_CLIENT_SECRET,
+      YOUTUBE_OAUTH_REDIRECT_URI
+    )
+
+    // Set refresh token
+    oauth2Client.setCredentials({
+      refresh_token: YOUTUBE_OAUTH_REFRESH_TOKEN
+    })
+  }
+
+  return oauth2Client
 }
 
 interface YouTubeVideo {
@@ -320,4 +354,167 @@ export function getEmbedUrl(videoId: string): string {
  */
 export function getWatchUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`
+}
+
+/**
+ * Fetch comments for a YouTube video
+ */
+export async function fetchVideoComments(videoId: string, maxResults: number = 10): Promise<any[]> {
+  try {
+    // Use OAuth2 for comments (service accounts don't have permission)
+    const authClient = getOAuth2Client()
+    const youtube = google.youtube({
+      version: 'v3',
+      auth: authClient
+    })
+
+    // Fetch comment threads (top-level comments with replies)
+    const response = await youtube.commentThreads.list({
+      part: ['snippet', 'replies'],
+      videoId: videoId,
+      maxResults: maxResults,
+      order: 'relevance', // Get most relevant comments first
+      textFormat: 'plainText'
+    })
+
+    if (!response.data.items) {
+      return []
+    }
+
+    const comments = []
+
+    for (const item of response.data.items) {
+      const topComment = item.snippet?.topLevelComment?.snippet
+      if (!topComment) continue
+
+      // Add top-level comment
+      comments.push({
+        commentId: item.snippet?.topLevelComment?.id || '',
+        authorName: topComment.authorDisplayName || 'Unknown',
+        authorChannelId: topComment.authorChannelId?.value || null,
+        authorProfileUrl: topComment.authorProfileImageUrl || null,
+        textDisplay: topComment.textDisplay || '',
+        likeCount: topComment.likeCount || 0,
+        publishedAt: new Date(topComment.publishedAt || new Date()),
+        updatedAt: new Date(topComment.updatedAt || new Date()),
+        isReply: false,
+        parentCommentId: null
+      })
+
+      // Add replies if they exist
+      if (item.replies?.comments) {
+        for (const reply of item.replies.comments) {
+          const replySnippet = reply.snippet
+          if (!replySnippet) continue
+
+          comments.push({
+            commentId: reply.id || '',
+            authorName: replySnippet.authorDisplayName || 'Unknown',
+            authorChannelId: replySnippet.authorChannelId?.value || null,
+            authorProfileUrl: replySnippet.authorProfileImageUrl || null,
+            textDisplay: replySnippet.textDisplay || '',
+            likeCount: replySnippet.likeCount || 0,
+            publishedAt: new Date(replySnippet.publishedAt || new Date()),
+            updatedAt: new Date(replySnippet.updatedAt || new Date()),
+            isReply: true,
+            parentCommentId: item.snippet?.topLevelComment?.id || null
+          })
+        }
+      }
+    }
+
+    return comments
+
+  } catch (error) {
+    console.error('Error fetching YouTube comments:', error)
+    return []
+  }
+}
+
+/**
+ * Get comments for a video (with caching)
+ */
+export async function getVideoComments(videoId: string): Promise<any[]> {
+  // Check cache first
+  const cached = await prisma.videoComment.findMany({
+    where: {
+      videoId: videoId,
+      expiresAt: {
+        gt: new Date()
+      }
+    },
+    orderBy: [
+      { isReply: 'asc' }, // Top-level comments first
+      { likeCount: 'desc' }, // Then by likes
+      { publishedAt: 'desc' } // Then by date
+    ]
+  })
+
+  if (cached.length > 0) {
+    console.log(`Using cached comments for video ${videoId}`)
+    return cached
+  }
+
+  console.log(`Fetching comments for video ${videoId}`)
+
+  // Fetch fresh comments
+  const comments = await fetchVideoComments(videoId, 10)
+
+  if (comments.length === 0) {
+    return []
+  }
+
+  // Get the YouTubeVideo record to link comments
+  const video = await prisma.youTubeVideo.findFirst({
+    where: { videoId }
+  })
+
+  if (!video) {
+    console.warn(`YouTubeVideo record not found for videoId ${videoId}`)
+    return comments // Return without caching
+  }
+
+  // Cache comments for a few days
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 3) // Cache for 3 days
+
+  // Save to database
+  for (const comment of comments) {
+    try {
+      await prisma.videoComment.upsert({
+        where: {
+          commentId: comment.commentId
+        },
+        create: {
+          youtubeVideoId: video.id,
+          videoId: videoId,
+          commentId: comment.commentId,
+          authorName: comment.authorName,
+          authorChannelId: comment.authorChannelId,
+          authorProfileUrl: comment.authorProfileUrl,
+          textDisplay: comment.textDisplay,
+          likeCount: comment.likeCount,
+          publishedAt: comment.publishedAt,
+          updatedAt: comment.updatedAt,
+          isReply: comment.isReply,
+          parentCommentId: comment.parentCommentId,
+          expiresAt
+        },
+        update: {
+          authorName: comment.authorName,
+          textDisplay: comment.textDisplay,
+          likeCount: comment.likeCount,
+          updatedAt: comment.updatedAt,
+          expiresAt,
+          checkedAt: new Date()
+        }
+      })
+    } catch (error) {
+      console.error('Error caching comment:', error)
+    }
+  }
+
+  console.log(`Cached ${comments.length} comments for video ${videoId}`)
+
+  return comments
 }

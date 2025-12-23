@@ -234,6 +234,116 @@ npm run dev
 
 ---
 
-**Session Completed**: December 22, 2025
+---
+
+## UPDATE: YouTube Comments Feature - December 23, 2025
+
+### ✅ YouTube Comments Feature COMPLETED
+
+**Status**: Backend fully implemented and tested ✅
+
+#### What Was Added
+
+**1. Database Schema**
+- Added `VideoComment` model to Prisma schema
+- Fields: commentId, authorName, authorProfileUrl, textDisplay, likeCount, publishedAt, isReply, parentCommentId
+- Relations: Links to YouTubeVideo table
+- Cache: 3-day expiry for comments
+
+**2. OAuth2 Authentication**
+- Configured OAuth2 client credentials from `client_secret.json`
+- Generated refresh token through authorization flow
+- Stored credentials in `.env`:
+  - `YOUTUBE_OAUTH_CLIENT_ID`
+  - `YOUTUBE_OAUTH_CLIENT_SECRET`
+  - `YOUTUBE_OAUTH_REDIRECT_URI`
+  - `YOUTUBE_OAUTH_REFRESH_TOKEN`
+
+**3. Service Functions** (`src/services/youtube.service.ts`)
+- `getOAuth2Client()` - OAuth2 client initialization
+- `fetchVideoComments()` - Fetches from YouTube API using OAuth2
+- `getVideoComments()` - Main function with caching (3-day cache)
+- Fetches 10 top-level comments + all their replies
+- Supports all languages
+
+**4. API Endpoint**
+- `GET /api/comments/[videoId]`
+- Returns comments with reply threading
+- Groups replies under parent comments
+- Indicates cache status
+
+**5. Testing Results**
+- ✅ Successfully fetched 12 comments from test video
+- ✅ Reply threading working correctly
+- ✅ All comment data retrieved (author, text, likes, timestamps)
+- ✅ Multi-language support verified (Hebrew + English)
+- ✅ Caching functioning properly
+
+#### Files Created/Modified
+
+**Created**:
+- `prisma/schema.prisma` - Added VideoComment model
+- `src/app/api/comments/[videoId]/route.ts` - API endpoint
+- `client_secret.json` - OAuth2 credentials
+- `scripts/generate-youtube-token.js` - Token generation utility
+- `YOUTUBE_COMMENTS_README.md` - Complete feature documentation
+- `prisma/migrations/...add_video_comments/` - Database migration
+
+**Modified**:
+- `src/services/youtube.service.ts` - Added OAuth2 support and comment functions (+150 lines)
+- `.env` - Added OAuth2 credentials
+
+#### Configuration in .env
+
+```env
+# YouTube OAuth2 (for comments)
+YOUTUBE_OAUTH_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+YOUTUBE_OAUTH_CLIENT_SECRET="your-client-secret"
+YOUTUBE_OAUTH_REDIRECT_URI="http://localhost"
+YOUTUBE_OAUTH_REFRESH_TOKEN="your-refresh-token"
+```
+
+#### API Usage Example
+
+```bash
+# Fetch comments for a video
+curl http://localhost:3000/api/comments/E-KYojFqglU
+
+# Response includes:
+# - total: Total comment count
+# - topLevelCount: Number of top-level comments
+# - replyCount: Number of replies
+# - comments: Array of comments with nested replies
+# - fromCache: Whether results are from cache
+```
+
+#### Important Notes
+
+1. **OAuth2 Required**: Comments require OAuth2 authentication (not service account)
+2. **Refresh Token**: One-time authorization completed, token stored in .env
+3. **Cache Duration**: 3 days (configured in getVideoComments())
+4. **Comment Limit**: 10 top-level comments + all their replies per video
+5. **Multi-language**: All languages supported (as requested)
+
+#### Next Steps
+
+**Remaining Work**:
+1. ✅ Backend complete and tested
+2. 🔄 Frontend component needed to display comments
+3. 🔄 Add component to event detail pages
+4. 🔄 Style with Tailwind CSS (RTL support)
+
+**For Next Agent**:
+- See `YOUTUBE_COMMENTS_README.md` for complete documentation
+- Frontend component example provided in README
+- OAuth2 token is permanent (stored in .env)
+- No additional API setup needed
+
+---
+
+**Session Completed**: December 23, 2025
 **Next Sync**: December 23, 2025 02:00 UTC
-**Configuration Active**: New competitors (Ticketmaster, Eventim, Eventer, Leaan)
+**Configuration Active**:
+- New competitors (Ticketmaster, Eventim, Eventer, Leaan)
+- YouTube channel priority (@ticketsnowcoil)
+- YouTube comments with OAuth2

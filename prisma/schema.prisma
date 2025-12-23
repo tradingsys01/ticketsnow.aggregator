@@ -70,8 +70,38 @@ model YouTubeVideo {
   checkedAt       DateTime @default(now())
   expiresAt       DateTime
 
+  comments        VideoComment[]
+
   @@unique([eventId, videoId])
   @@index([eventId])
+}
+
+model VideoComment {
+  id                String   @id @default(cuid())
+  youtubeVideoId    String
+  video             YouTubeVideo @relation(fields: [youtubeVideoId], references: [id], onDelete: Cascade)
+
+  videoId           String   // YouTube video ID (e.g., E-KYojFqglU)
+  commentId         String   @unique
+  authorName        String
+  authorChannelId   String?
+  authorProfileUrl  String?
+  textDisplay       String
+  likeCount         Int      @default(0)
+  publishedAt       DateTime
+  updatedAt         DateTime
+
+  // For replies
+  parentCommentId   String?
+  isReply           Boolean  @default(false)
+
+  checkedAt         DateTime @default(now())
+  expiresAt         DateTime
+
+  @@index([youtubeVideoId])
+  @@index([videoId])
+  @@index([expiresAt])
+  @@index([parentCommentId])
 }
 
 model SearchLog {
