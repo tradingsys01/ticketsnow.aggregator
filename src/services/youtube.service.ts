@@ -124,7 +124,6 @@ export async function searchYouTube(query: string, channelId?: string): Promise<
       type: ['video'],
       maxResults: 5,
       videoEmbeddable: 'true',
-      videoDuration: 'medium', // 4-20 minutes
       relevanceLanguage: 'he',
       safeSearch: 'strict'
     }
@@ -132,6 +131,10 @@ export async function searchYouTube(query: string, channelId?: string): Promise<
     // Add channel filter if provided
     if (channelId) {
       searchParams.channelId = channelId
+      // Don't filter by duration when searching within a specific channel
+    } else {
+      // Only filter by duration for general search
+      searchParams.videoDuration = 'medium' // 4-20 minutes
     }
 
     // Search for videos
