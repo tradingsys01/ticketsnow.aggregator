@@ -45,11 +45,62 @@ interface SearchResult {
 }
 
 /**
+ * Check if URL is a generic listing page (not a specific event)
+ */
+function isGenericUrl(url: string): boolean {
+  const genericPatterns = [
+    /\/this-week/i,
+    /\/this-weekend/i,
+    /\/today/i,
+    /\/tomorrow/i,
+    /\/city\//i,
+    /\/category\//i,
+    /\/categories\//i,
+    /\/all-events/i,
+    /\/search\?/i,
+    /\/search$/i,
+    /\/browse/i,
+    /\/listing/i,
+    /\/$/, // Home page
+  ]
+
+  return genericPatterns.some(pattern => pattern.test(url))
+}
+
+/**
+ * Check if URL looks like a direct event page
+ */
+function isEventUrl(url: string): boolean {
+  const eventPatterns = [
+    /\/event\//i,
+    /\/show\//i,
+    /\/ticket\//i,
+    /\/tickets\//i,
+    /\/production\//i,
+    /\/artist\//i,
+    /\/performance\//i,
+    /\d{4,}/, // URLs with numeric IDs (event IDs)
+  ]
+
+  return eventPatterns.some(pattern => pattern.test(url))
+}
+
+/**
  * Calculate match score between search result and event
  * Score ranges from 0.0 to 1.0
  */
 export function calculateMatchScore(result: SearchResult, event: Partial<Event>): number {
+  const url = result.link.toLowerCase()
+
+  // Reject generic listing pages immediately
+  if (isGenericUrl(url)) {
+    console.log(`Rejecting generic URL: ${url}`)
+    return 0.0
+  }
+
   let score = 0.0
+  let matchedCriteria = 0
+
   const title = result.title.toLowerCase()
   const snippet = result.snippet.toLowerCase()
   const eventName = (event.name || '').toLowerCase()
@@ -58,25 +109,47 @@ export function calculateMatchScore(result: SearchResult, event: Partial<Event>)
 
   // Extract main keywords from event name (remove common words)
   const eventKeywords = eventName
-    .replace(/הצגה|הצגת|מופע|כרטיסים|לילדים|ילדים/g, '')
+    .replace(/הצגה|הצגת|מופע|כרטיסים|לילדים|ילדים|קרקס|תיאטרון/g, '')
     .trim()
     .split(/\s+/)
     .filter(word => word.length > 2)
 
-  // Check if any event keywords in title (0.4 points)
-  const hasEventKeywords = eventKeywords.some(keyword =>
+  // Check if event keywords in title (0.4 points) - require at least 2 keywords
+  const matchedKeywords = eventKeywords.filter(keyword =>
     title.includes(keyword) || snippet.includes(keyword)
   )
-  if (hasEventKeywords) score += 0.4
-
-  // Check if performer name in result (0.3 points)
-  if (performerName && (title.includes(performerName) || snippet.includes(performerName))) {
+  if (matchedKeywords.length >= 2) {
+    score += 0.4
+    matchedCriteria++
+  } else if (matchedKeywords.length === 1 && eventKeywords.length <= 2) {
+    // For short event names, 1 keyword match is ok
     score += 0.3
+    matchedCriteria++
   }
 
-  // Check if venue name in result (0.3 points)
-  if (venue && venue !== 'לא צוין' && (title.includes(venue) || snippet.includes(venue))) {
+  // Check if performer name in result (0.3 points)
+  if (performerName && performerName.length > 2 &&
+      (title.includes(performerName) || snippet.includes(performerName))) {
     score += 0.3
+    matchedCriteria++
+  }
+
+  // Check if venue name in result (0.2 points)
+  if (venue && venue !== 'לא צוין' && venue.length > 3 &&
+      (title.includes(venue) || snippet.includes(venue))) {
+    score += 0.2
+    matchedCriteria++
+  }
+
+  // Bonus for direct event URLs (0.1 points)
+  if (isEventUrl(url)) {
+    score += 0.1
+  }
+
+  // Require at least 2 matching criteria for a valid match
+  if (matchedCriteria < 2 && score < 0.5) {
+    console.log(`Low confidence match (${matchedCriteria} criteria, score ${score}): ${url}`)
+    return 0.0
   }
 
   return Math.min(score, 1.0)
@@ -259,13 +332,14 @@ export async function findCompetitorMatches(event: Event) {
       for (const result of searchResults) {
         const score = calculateMatchScore(result, event)
 
-        // Only keep results with decent match score
-        if (score >= 0.3) {
+        // Only keep results with good match score (0.5+)
+        if (score >= 0.5) {
           results.push({
             competitorName: competitor.name,
             competitorUrl: result.link,
             matchScore: score
           })
+          console.log(`✓ Match found: ${competitor.name} (score: ${score.toFixed(2)}) - ${result.link}`)
         }
       }
 
