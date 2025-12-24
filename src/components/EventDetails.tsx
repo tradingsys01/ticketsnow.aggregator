@@ -9,19 +9,6 @@ interface EventDetailsProps {
 }
 
 export default function EventDetails({ event }: EventDetailsProps) {
-  const eventDate = new Date(event.date)
-  const formattedDate = new Intl.DateTimeFormat('he-IL', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(eventDate)
-
-  const formattedTime = new Intl.DateTimeFormat('he-IL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(eventDate)
-
   const priceDisplay = event.minPrice
     ? event.maxPrice && event.maxPrice !== event.minPrice
       ? `${event.minPrice}-${event.maxPrice}₪`
@@ -56,21 +43,12 @@ export default function EventDetails({ event }: EventDetailsProps) {
             <h1 className="text-4xl font-bold mb-6">{event.name}</h1>
 
             <div className="space-y-4">
-              {/* Date & Time */}
+              {/* Category */}
               <div className="flex items-start gap-3">
-                <span className="text-3xl">📅</span>
+                <span className="text-3xl">🎭</span>
                 <div>
-                  <div className="font-semibold">{formattedDate}</div>
-                  <div className="text-blue-100">שעה: {formattedTime}</div>
-                </div>
-              </div>
-
-              {/* Venue */}
-              <div className="flex items-start gap-3">
-                <span className="text-3xl">📍</span>
-                <div>
-                  <div className="font-semibold">{event.venue}</div>
-                  <div className="text-blue-100">{event.city}</div>
+                  <div className="font-semibold">הצגה לילדים ולכל המשפחה</div>
+                  <div className="text-blue-100">הופעות ברחבי הארץ</div>
                 </div>
               </div>
 
@@ -92,7 +70,7 @@ export default function EventDetails({ event }: EventDetailsProps) {
                   <div className="font-semibold text-yellow-300 text-2xl">
                     {priceDisplay}
                   </div>
-                  <div className="text-blue-100 text-sm">מחיר כרטיס</div>
+                  <div className="text-blue-100 text-sm">החל מ-</div>
                 </div>
               </div>
 
@@ -104,8 +82,9 @@ export default function EventDetails({ event }: EventDetailsProps) {
                   rel="noopener noreferrer"
                   className="inline-block bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all text-lg"
                 >
-                  🎫 רכישת כרטיסים
+                  🎫 לתאריכים ורכישת כרטיסים
                 </a>
+                <p className="text-blue-100 text-sm mt-2">בחר תאריך ומיקום באתר המכירה</p>
               </div>
             </div>
           </div>
