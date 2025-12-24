@@ -1,0 +1,25 @@
+# Crontab configuration for kids.ticketsnow.co.il production server
+# IMPORTANT: Do NOT use "crontab crontab-production.txt" - it will DELETE existing jobs!
+# Instead: Use "crontab -e" and ADD these entries manually
+
+# Environment variables for kids.ticketsnow.co.il
+SITE_URL=https://kids.ticketsnow.co.il
+CRON_SECRET=ddd2c5253265b6ef1d2f851c6470976d49147fd45e92b7d2414bc74dd2d84c41
+LOG_DIR=/home/appuser/apps/kids.ticketsnow.co.il/logs
+
+# Email reporting (Gmail SMTP with App Password)
+EMAIL_PROVIDER=gmail
+EMAIL_FROM=gshoihet@gmail.com
+EMAIL_TO=gshoihet@gmail.com
+GMAIL_USER=gshoihet@gmail.com
+GMAIL_PWD=kwcvtckjtyyrpray
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Daily comprehensive sync at 02:00 UTC
+# Syncs: Events, Competitors, YouTube Videos, YouTube Comments + Email Report
+0 2 * * * /home/appuser/apps/kids.ticketsnow.co.il/scripts/cron-sync-events.sh >> /home/appuser/apps/kids.ticketsnow.co.il/logs/cron.log 2>&1
+
+# Weekly log rotation (cleanup logs older than 30 days)
+0 3 * * 0 find /home/appuser/apps/kids.ticketsnow.co.il/logs -name "cron-sync-*.log" -mtime +30 -delete >> /home/appuser/apps/kids.ticketsnow.co.il/logs/cleanup.log 2>&1

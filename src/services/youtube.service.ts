@@ -69,6 +69,148 @@ interface YouTubeVideo {
   title: string
   thumbnailUrl: string
   channelTitle: string
+  duration?: number // Duration in seconds
+}
+
+/**
+ * Parse ISO 8601 duration to seconds (e.g., "PT1M30S" -> 90)
+ */
+function parseDuration(isoDuration: string): number {
+  if (!isoDuration) return 0
+
+  const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!match) return 0
+
+  const hours = parseInt(match[1] || '0', 10)
+  const minutes = parseInt(match[2] || '0', 10)
+  const seconds = parseInt(match[3] || '0', 10)
+
+  return hours * 3600 + minutes * 60 + seconds
+}
+
+interface VideoDetails {
+  duration: number
+  isShort: boolean
+}
+
+/**
+ * Get video details including duration and Short detection
+ * Shorts are detected by checking if the video has vertical aspect ratio
+ */
+async function getVideoDetails(videoIds: string[]): Promise<Map<string, VideoDetails>> {
+  const details = new Map<string, VideoDetails>()
+
+  if (videoIds.length === 0) return details
+
+  try {
+    const auth = getGoogleAuth()
+    const authClient = await auth.getClient()
+    const youtube = google.youtube({
+      version: 'v3',
+      auth: authClient as any
+    })
+
+    // Get video details including snippet for thumbnail dimensions
+    const response = await youtube.videos.list({
+      part: ['contentDetails', 'snippet'],
+      id: videoIds
+    })
+
+    if (response.data.items) {
+      for (const item of response.data.items) {
+        if (!item.id) continue
+
+        const duration = parseDuration(item.contentDetails?.duration || '')
+
+        // Detect Shorts by thumbnail aspect ratio
+        // Shorts have vertical thumbnails (height > width)
+        // Normal videos have horizontal thumbnails (width > height)
+        const thumbnail = item.snippet?.thumbnails?.maxres ||
+                          item.snippet?.thumbnails?.high ||
+                          item.snippet?.thumbnails?.medium ||
+                          item.snippet?.thumbnails?.default
+
+        let isShort = false
+        if (thumbnail?.width && thumbnail?.height) {
+          // Shorts have vertical aspect ratio (9:16), so height > width
+          isShort = thumbnail.height > thumbnail.width
+        }
+
+        // Additional check: Shorts are typically < 60 seconds AND vertical
+        // But we trust the aspect ratio as primary indicator
+        if (!isShort && duration > 0 && duration <= 60) {
+          // If duration is short but thumbnail is horizontal, it's NOT a Short
+          // Just a short video - keep it
+          console.log(`Video ${item.id} is ${duration}s but horizontal - NOT a Short`)
+        }
+
+        details.set(item.id, { duration, isShort })
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching video details:', error)
+  }
+
+  return details
+}
+
+/**
+ * Filter out YouTube Shorts (vertical videos)
+ * Also removes duplicate titles, keeping the normal (horizontal) version
+ */
+async function filterOutShorts(videos: YouTubeVideo[]): Promise<YouTubeVideo[]> {
+  if (videos.length === 0) return videos
+
+  const videoIds = videos.map(v => v.videoId)
+  const videoDetails = await getVideoDetails(videoIds)
+
+  // Add details to videos
+  const videosWithDetails = videos.map(v => {
+    const details = videoDetails.get(v.videoId)
+    return {
+      ...v,
+      duration: details?.duration || 0,
+      isShort: details?.isShort || false
+    }
+  })
+
+  // Group by normalized title (for duplicate detection)
+  const titleGroups = new Map<string, (YouTubeVideo & { isShort: boolean })[]>()
+
+  for (const video of videosWithDetails) {
+    // Normalize title for comparison (remove extra spaces, lowercase)
+    const normalizedTitle = video.title.toLowerCase().trim().replace(/\s+/g, ' ')
+
+    if (!titleGroups.has(normalizedTitle)) {
+      titleGroups.set(normalizedTitle, [])
+    }
+    titleGroups.get(normalizedTitle)!.push(video)
+  }
+
+  const result: YouTubeVideo[] = []
+
+  for (const [title, group] of titleGroups) {
+    // Filter out Shorts (vertical videos)
+    const nonShorts = group.filter(v => !v.isShort)
+
+    if (nonShorts.length > 0) {
+      // If multiple non-shorts with same title, keep the longest
+      nonShorts.sort((a, b) => (b.duration || 0) - (a.duration || 0))
+      result.push(nonShorts[0])
+
+      const shortsCount = group.length - nonShorts.length
+      if (shortsCount > 0) {
+        console.log(`Filtered out ${shortsCount} Shorts for: "${title.substring(0, 50)}..." (kept ${nonShorts[0].duration}s normal video)`)
+      }
+    } else if (group.length > 0) {
+      // All are Shorts - keep the longest Short as fallback
+      group.sort((a, b) => (b.duration || 0) - (a.duration || 0))
+      result.push(group[0])
+      console.log(`Only Shorts available for: "${title.substring(0, 50)}..." (keeping ${group[0].duration}s)`)
+    }
+  }
+
+  return result
 }
 
 /**
@@ -284,14 +426,17 @@ export async function findEventVideos(event: Event): Promise<YouTubeVideo[]> {
   // Filter relevant videos
   const relevantVideos = filterRelevantVideos(allVideos, event)
 
-  console.log(`Found ${relevantVideos.length} relevant videos (${allVideos.length} total)`)
+  // Filter out Shorts and deduplicate by title (keep longest video)
+  const finalVideos = await filterOutShorts(relevantVideos)
+
+  console.log(`Found ${finalVideos.length} videos (${allVideos.length} total, ${relevantVideos.length} relevant, filtered ${relevantVideos.length - finalVideos.length} shorts)`)
 
   // Cache results for 24 hours
   const expiresAt = new Date()
   expiresAt.setHours(expiresAt.getHours() + CACHE_DURATION_HOURS)
 
   // Save to database
-  for (const video of relevantVideos) {
+  for (const video of finalVideos) {
     try {
       await prisma.youTubeVideo.upsert({
         where: {
@@ -321,7 +466,7 @@ export async function findEventVideos(event: Event): Promise<YouTubeVideo[]> {
     }
   }
 
-  return relevantVideos
+  return finalVideos
 }
 
 /**

@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { syncEvents } from '@/services/events.service'
-import { processCompetitorSearchQueue } from '@/services/competitor.service'
+import { runDailySync, getEmailReportData } from '@/services/sync.service'
+import { sendSyncReport } from '@/services/email.service'
 
 /**
- * Daily Sync Cron Job
+ * Comprehensive Daily Sync Cron Job
  *
  * Runs daily at 2:00 AM (configured in vercel.json)
  *
  * Tasks:
  * 1. Sync events from Bravo JSON API
- * 2. Process competitor search queue (with quota management)
- * 3. Log results for monitoring
+ * 2. Process competitor search queue (Google Custom Search, 100 queries/day)
+ * 3. Process YouTube video search queue (YouTube Data API)
+ * 4. Process YouTube comments queue (YouTube Data API)
  *
  * Authentication: Requires CRON_SECRET header
  */
@@ -41,17 +42,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('🚀 Starting daily sync job...')
+    console.log('🚀 Starting comprehensive daily sync job...')
 
-    // Step 1: Sync events from Bravo
-    console.log('📥 Step 1: Syncing events from Bravo...')
-    const eventSyncResult = await syncEvents()
-    console.log('✅ Event sync completed:', eventSyncResult)
-
-    // Step 2: Process competitor search queue
-    console.log('🔍 Step 2: Processing competitor search queue...')
-    const competitorResult = await processCompetitorSearchQueue()
-    console.log('✅ Competitor search completed:', competitorResult)
+    // Run complete sync (events, competitors, videos, comments)
+    const stats = await runDailySync()
 
     // Calculate total duration
     const duration = Date.now() - startTime
@@ -62,23 +56,46 @@ export async function GET(request: NextRequest) {
       success: true,
       timestamp: new Date().toISOString(),
       duration: `${durationSeconds}s`,
-      eventSync: {
-        total: eventSyncResult.eventsTotal,
-        new: eventSyncResult.eventsNew,
-        updated: eventSyncResult.eventsUpdated,
-        removed: eventSyncResult.eventsRemoved
-      },
-      competitorSearch: {
-        processed: competitorResult.processed,
-        queriesUsed: competitorResult.queriesUsed || 0,
-        remaining: competitorResult.remaining || 0
-      }
+      ...stats
     }
 
     console.log('🎉 Daily sync job completed successfully')
     console.log(`   Duration: ${durationSeconds}s`)
-    console.log(`   Events: ${eventSyncResult.eventsNew} new, ${eventSyncResult.eventsUpdated} updated, ${eventSyncResult.eventsRemoved} removed`)
-    console.log(`   Competitors: ${competitorResult.processed} events processed, ${competitorResult.queriesUsed} queries used`)
+    console.log(`   Events: ${stats.eventSync.new} new, ${stats.eventSync.updated} updated, ${stats.eventSync.removed} removed`)
+    console.log(`   Competitors: ${stats.competitorSearch.processed} events, ${stats.competitorSearch.queriesUsed} queries`)
+    console.log(`   YouTube Videos: ${stats.youtubeVideos.eventsProcessed} events, ${stats.youtubeVideos.videosFound} videos`)
+    console.log(`   YouTube Comments: ${stats.youtubeComments.videosProcessed} videos, ${stats.youtubeComments.commentsFetched} comments`)
+
+    // Send email report
+    try {
+      console.log('📧 Sending email report...')
+      const emailData = await getEmailReportData(stats)
+      await sendSyncReport({
+        success: true,
+        timestamp: new Date().toISOString(),
+        duration: `${durationSeconds}s`,
+        eventSync: {
+          ...stats.eventSync,
+          newEventsList: emailData.newEventsList
+        },
+        competitorSearch: {
+          ...stats.competitorSearch,
+          topMatches: emailData.topMatches
+        },
+        youtubeVideos: {
+          ...stats.youtubeVideos,
+          newVideos: emailData.newVideos
+        },
+        youtubeComments: {
+          ...stats.youtubeComments,
+          topComments: emailData.topComments
+        }
+      })
+      console.log('✅ Email report sent successfully')
+    } catch (emailError) {
+      console.error('⚠️  Failed to send email report:', emailError)
+      // Don't fail the sync if email fails
+    }
 
     return NextResponse.json(result)
 
@@ -89,6 +106,24 @@ export async function GET(request: NextRequest) {
     console.error('❌ Daily sync job failed:', error)
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+    // Send error email report
+    try {
+      console.log('📧 Sending error email report...')
+      await sendSyncReport({
+        success: false,
+        timestamp: new Date().toISOString(),
+        duration: `${durationSeconds}s`,
+        eventSync: { total: 0, new: 0, updated: 0, removed: 0 },
+        competitorSearch: { processed: 0, queriesUsed: 0, remaining: 0, matchesFound: 0 },
+        youtubeVideos: { eventsProcessed: 0, videosFound: 0, cacheHits: 0 },
+        youtubeComments: { videosProcessed: 0, commentsFetched: 0, cacheHits: 0 },
+        errors: [errorMessage]
+      })
+      console.log('✅ Error email report sent')
+    } catch (emailError) {
+      console.error('⚠️  Failed to send error email:', emailError)
+    }
 
     return NextResponse.json(
       {
