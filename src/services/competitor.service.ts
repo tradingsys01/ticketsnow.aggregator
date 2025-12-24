@@ -313,11 +313,10 @@ export async function findCompetitorMatches(event: Event) {
 
   console.log(`Searching competitors for: ${event.name}`)
 
-  // Build search query from event details
-  const searchTerms = [
-    event.name,
-    event.performerName
-  ].filter(Boolean).join(' ')
+  // Build search query - use ONLY event name (title)
+  // Don't include venue/city because touring shows have multiple locations
+  // Don't include performer to keep search broad
+  const searchTerms = event.name
 
   const results = []
   let queriesUsed = 0
