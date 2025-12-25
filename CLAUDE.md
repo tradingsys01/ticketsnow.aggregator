@@ -148,6 +148,81 @@ Bravo JSON Feed → Events Service → Database (SQLite/PostgreSQL)
 - Dynamic metadata in each page
 - Sitemap generator (`app/sitemap.ts`)
 
+## Pagination & Scrolling Architecture
+
+The site uses a **hybrid approach** for event listings to balance UX and SEO:
+
+### Homepage (`/`) - Infinite Scroll
+- **Component**: `InfiniteScrollEvents` (client component)
+- **First page**: Server-rendered (12 events) for SEO
+- **Additional pages**: Loaded via `/api/events` on scroll
+- **Trigger**: Intersection Observer at 100px from bottom
+- **State**: Managed with React useState (events, loading, hasMore, offset)
+- **Filters**: Synced with URL params (q, city, date)
+
+```
+┌─────────────────────────────────────┐
+│  Homepage (/)                       │
+│  ┌───────────────────────────────┐  │
+│  │ First 12 events (SSR)         │  │  ← Crawlers see this
+│  │ - Server rendered             │  │
+│  │ - SEO indexed                 │  │
+│  └───────────────────────────────┘  │
+│  ┌───────────────────────────────┐  │
+│  │ Events 13-24 (CSR)            │  │  ← Loaded on scroll
+│  │ - Client loaded via API       │  │
+│  │ - NOT indexed by crawlers     │  │
+│  └───────────────────────────────┘  │
+│           ↓ scroll ↓                │
+│  ┌───────────────────────────────┐  │
+│  │ Events 25-36 (CSR)            │  │
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+### All Events Page (`/events`) - Traditional Pagination
+- **Component**: `Pagination` (client component)
+- **Rendering**: Fully server-rendered (24 events per page)
+- **Navigation**: Page links (?page=1, ?page=2, etc.)
+- **SEO**: All pages indexed in sitemap.xml
+- **Purpose**: Ensures all events are crawlable by search engines and LLMs
+
+```
+┌─────────────────────────────────────┐
+│  /events (page 1)                   │
+│  24 events - fully SSR, indexed     │
+│  [1] [2] [3] ... [Next →]           │
+└─────────────────────────────────────┘
+         ↓ click page 2
+┌─────────────────────────────────────┐
+│  /events?page=2                     │
+│  24 events - fully SSR, indexed     │
+│  [← Prev] [1] [2] [3] ... [Next →]  │
+└─────────────────────────────────────┘
+```
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `src/components/InfiniteScrollEvents.tsx` | Infinite scroll for homepage |
+| `src/components/Pagination.tsx` | Traditional pagination component |
+| `src/app/page.tsx` | Homepage with infinite scroll |
+| `src/app/events/page.tsx` | All events with pagination |
+| `src/app/api/events/route.ts` | API for fetching events (supports limit, offset, filters) |
+| `src/app/sitemap.ts` | Includes paginated /events URLs |
+
+### Component Props
+- **basePath**: Both `Pagination`, `SearchBar`, and `Filters` accept `basePath` prop
+  - Default: `/` (homepage)
+  - For /events page: `/events`
+  - This ensures filter/search redirects stay on the correct page
+
+### API Endpoint
+```
+GET /api/events?limit=12&offset=0&q=&city=&date=
+Response: { events: [], total: number, hasMore: boolean, offset, limit }
+```
+
 ## Critical Implementation Rules
 
 1. **Always Filter Kids Events**: Category must contain "ילדים" from Bravo feed
