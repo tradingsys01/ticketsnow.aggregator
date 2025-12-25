@@ -77,7 +77,7 @@ export default async function CompetitorLinks({ eventId, eventName }: Competitor
                     {competitor.name}
                   </h3>
                   <p className="text-sm text-gray-600 mb-2">
-                    מציגים "{eventName}"
+                    מציגים &quot;{eventName}&quot;
                   </p>
                   <div className="flex items-center gap-2 text-xs">
                     <span>🌐</span>
