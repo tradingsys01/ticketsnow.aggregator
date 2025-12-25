@@ -1,10 +1,9 @@
 import { Suspense } from 'react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import EventList from '@/components/EventList'
+import InfiniteScrollEvents from '@/components/InfiniteScrollEvents'
 import SearchBar from '@/components/SearchBar'
 import Filters from '@/components/Filters'
-import Pagination from '@/components/Pagination'
 import SchemaMarkup from '@/components/SchemaMarkup'
 import { generateItemListSchema } from '@/lib/schema'
 import { searchEvents, getSearchResultsCount, getUniqueCities } from '@/services/events.service'
@@ -16,31 +15,19 @@ interface HomeProps {
 }
 
 export default async function Home({ searchParams }: HomeProps) {
-  // Get search query, filters, and page from URL params
+  // Get search query and filters from URL params
   const query = typeof searchParams.q === 'string' ? searchParams.q : ''
   const city = typeof searchParams.city === 'string' ? searchParams.city : ''
   const dateFilter = typeof searchParams.date === 'string' ? searchParams.date : ''
-  const page = typeof searchParams.page === 'string' ? parseInt(searchParams.page) : 1
-  const currentPage = Math.max(1, page)
 
-  // Calculate offset
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE
-
-  // Fetch events, total count, and cities
+  // Fetch initial events (first page), total count, and cities
   const [events, totalCount, cities] = await Promise.all([
-    searchEvents(query, ITEMS_PER_PAGE, offset, city, dateFilter),
+    searchEvents(query, ITEMS_PER_PAGE, 0, city, dateFilter),
     getSearchResultsCount(query, city, dateFilter),
     getUniqueCities()
   ])
 
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
-
-  // Determine title based on search
-  const title = query
-    ? `תוצאות חיפוש: "${query}"`
-    : 'הצגות קרובות'
-
-  // Generate ItemList schema for events on current page
+  // Generate ItemList schema for SEO (first page events)
   const itemListSchema = events.length > 0 ? generateItemListSchema(events) : null
 
   return (
@@ -74,21 +61,28 @@ export default async function Home({ searchParams }: HomeProps) {
           <Filters cities={cities} />
         </Suspense>
 
-        {/* Event List */}
+        {/* Event List with Infinite Scroll */}
         {events.length > 0 ? (
-          <>
-            <EventList events={events} title={title} />
-
-            {/* Pagination */}
-            <Suspense fallback={<div className="h-16" />}>
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={totalCount}
-                itemsPerPage={ITEMS_PER_PAGE}
-              />
-            </Suspense>
-          </>
+          <Suspense fallback={
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl shadow-lg overflow-hidden border-4 border-gray-200 animate-pulse">
+                  <div className="h-48 bg-gradient-to-br from-gray-200 to-gray-300" />
+                  <div className="p-5 space-y-3">
+                    <div className="h-6 bg-gray-200 rounded w-3/4" />
+                    <div className="h-4 bg-gray-200 rounded w-1/2" />
+                    <div className="h-4 bg-gray-200 rounded w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          }>
+            <InfiniteScrollEvents
+              initialEvents={events}
+              initialTotal={totalCount}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
+          </Suspense>
         ) : (
           <div className="text-center py-12">
             <div className="text-8xl mb-6">🔍</div>
@@ -111,8 +105,8 @@ export default async function Home({ searchParams }: HomeProps) {
           </div>
         )}
 
-        {/* Additional Info - only show on first page without search */}
-        {!query && currentPage === 1 && events.length > 0 && (
+        {/* Additional Info - only show without search */}
+        {!query && events.length > 0 && (
           <div className="mt-12 text-center">
             <div className="bg-white rounded-2xl shadow-lg p-8 border-4 border-yellow-300">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
