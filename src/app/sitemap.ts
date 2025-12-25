@@ -2,6 +2,7 @@ import { MetadataRoute } from 'next'
 import prisma from '@/lib/db'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+const ITEMS_PER_PAGE = 24
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Get all upcoming events
@@ -21,6 +22,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   })
 
+  // Calculate total pages for /events pagination
+  const totalPages = Math.ceil(events.length / ITEMS_PER_PAGE)
+
   // Homepage
   const routes: MetadataRoute.Sitemap = [
     {
@@ -31,7 +35,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   ]
 
-  // Event pages
+  // All events listing page (first page)
+  routes.push({
+    url: `${SITE_URL}/events`,
+    lastModified: new Date(),
+    changeFrequency: 'daily',
+    priority: 0.9
+  })
+
+  // Paginated events pages (page 2+)
+  for (let page = 2; page <= totalPages; page++) {
+    routes.push({
+      url: `${SITE_URL}/events?page=${page}`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.7
+    })
+  }
+
+  // Individual event pages
   events.forEach(event => {
     routes.push({
       url: `${SITE_URL}/event/${event.slug}`,

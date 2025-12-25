@@ -31,8 +31,8 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/#upcoming" className="hover:text-yellow-300 transition-colors">
-                  הצגות קרובות
+                <Link href="/events" className="hover:text-yellow-300 transition-colors">
+                  כל ההצגות
                 </Link>
               </li>
               <li>

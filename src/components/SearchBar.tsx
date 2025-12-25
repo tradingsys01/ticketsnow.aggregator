@@ -3,7 +3,11 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
-export default function SearchBar() {
+interface SearchBarProps {
+  basePath?: string
+}
+
+export default function SearchBar({ basePath = '/' }: SearchBarProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
@@ -23,7 +27,8 @@ export default function SearchBar() {
       params.delete('q')
     }
 
-    router.push(`/?${params.toString()}`)
+    const queryString = params.toString()
+    router.push(queryString ? `${basePath}?${queryString}` : basePath)
   }
 
   const handleClear = () => {
@@ -31,7 +36,8 @@ export default function SearchBar() {
     const params = new URLSearchParams(searchParams.toString())
     params.delete('q')
     params.delete('page')
-    router.push(`/?${params.toString()}`)
+    const queryString = params.toString()
+    router.push(queryString ? `${basePath}?${queryString}` : basePath)
   }
 
   return (

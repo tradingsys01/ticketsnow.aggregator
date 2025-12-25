@@ -16,9 +16,11 @@ kids.ticketsnow.co.il is a comprehensive ticket aggregation website that helps I
 
 ## Content Structure
 
-- `/` - Homepage with all upcoming events
+- `/` - Homepage with featured upcoming events (infinite scroll for users)
+- `/events` - Complete paginated list of all events (SEO-optimized, all pages crawlable)
+- `/events?page=2` - Paginated event listings
 - `/event/{slug}` - Individual event pages with full details, pricing, videos, and competitor links
-- `/sitemap.xml` - XML sitemap of all pages
+- `/sitemap.xml` - XML sitemap of all pages including paginated listings
 - `/api/events` - JSON API for event data
 
 ## Target Audience

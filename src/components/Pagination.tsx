@@ -8,9 +8,10 @@ interface PaginationProps {
   totalPages: number
   totalItems: number
   itemsPerPage: number
+  basePath?: string
 }
 
-export default function Pagination({ currentPage, totalPages, totalItems, itemsPerPage }: PaginationProps) {
+export default function Pagination({ currentPage, totalPages, totalItems, itemsPerPage, basePath = '/' }: PaginationProps) {
   const searchParams = useSearchParams()
 
   const createPageUrl = (page: number) => {
@@ -20,7 +21,8 @@ export default function Pagination({ currentPage, totalPages, totalItems, itemsP
     } else {
       params.delete('page')
     }
-    return `/?${params.toString()}`
+    const queryString = params.toString()
+    return queryString ? `${basePath}?${queryString}` : basePath
   }
 
   if (totalPages <= 1) {

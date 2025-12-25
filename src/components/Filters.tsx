@@ -4,9 +4,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 interface FiltersProps {
   cities: string[]
+  basePath?: string
 }
 
-export default function Filters({ cities }: FiltersProps) {
+export default function Filters({ cities, basePath = '/' }: FiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -25,7 +26,8 @@ export default function Filters({ cities }: FiltersProps) {
     // Reset to first page when changing filters
     params.delete('page')
 
-    router.push(`/?${params.toString()}`)
+    const queryString = params.toString()
+    router.push(queryString ? `${basePath}?${queryString}` : basePath)
   }
 
   const clearFilters = () => {
@@ -33,7 +35,8 @@ export default function Filters({ cities }: FiltersProps) {
     params.delete('city')
     params.delete('date')
     params.delete('page')
-    router.push(`/?${params.toString()}`)
+    const queryString = params.toString()
+    router.push(queryString ? `${basePath}?${queryString}` : basePath)
   }
 
   const hasActiveFilters = currentCity || currentDateFilter
