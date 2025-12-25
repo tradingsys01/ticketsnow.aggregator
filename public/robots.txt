@@ -28,4 +28,4 @@ User-agent: Bingbot
 Allow: /
 
 # Sitemap
-Sitemap: http://localhost:3000/sitemap.xml
+Sitemap: https://kids.ticketsnow.co.il/sitemap.xml

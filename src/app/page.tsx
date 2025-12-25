@@ -5,6 +5,8 @@ import EventList from '@/components/EventList'
 import SearchBar from '@/components/SearchBar'
 import Filters from '@/components/Filters'
 import Pagination from '@/components/Pagination'
+import SchemaMarkup from '@/components/SchemaMarkup'
+import { generateItemListSchema } from '@/lib/schema'
 import { searchEvents, getSearchResultsCount, getUniqueCities } from '@/services/events.service'
 
 const ITEMS_PER_PAGE = 12
@@ -38,9 +40,15 @@ export default async function Home({ searchParams }: HomeProps) {
     ? `תוצאות חיפוש: "${query}"`
     : 'הצגות קרובות'
 
+  // Generate ItemList schema for events on current page
+  const itemListSchema = events.length > 0 ? generateItemListSchema(events) : null
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-pink-50 flex flex-col">
       <Header />
+
+      {/* ItemList Schema for event listings */}
+      {itemListSchema && <SchemaMarkup schema={itemListSchema} />}
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
         {/* Hero Section */}

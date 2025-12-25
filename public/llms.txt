@@ -1,0 +1,53 @@
+# kids.ticketsnow.co.il - Kids Shows & Events Ticket Aggregator
+
+> Israeli ticket aggregation platform for children's shows and performances. Hebrew language (RTL).
+
+## About This Site
+
+kids.ticketsnow.co.il is a comprehensive ticket aggregation website that helps Israeli families find children's shows, theater performances, and entertainment events. The site aggregates event data from Bravo ticketing platform, enriches it with competitor price comparisons and YouTube preview videos.
+
+## Main Features
+
+- **Event Listings**: All upcoming kids shows and performances in Israel
+- **Price Comparison**: Links to competitor ticket sellers (Ticketsi, Leaan, Eventer, Youticket)
+- **Video Previews**: YouTube videos for each show
+- **Search & Filters**: Search by name, filter by city and date
+- **Hebrew Interface**: Full Hebrew language support with RTL layout
+
+## Content Structure
+
+- `/` - Homepage with all upcoming events
+- `/event/{slug}` - Individual event pages with full details, pricing, videos, and competitor links
+- `/sitemap.xml` - XML sitemap of all pages
+- `/api/events` - JSON API for event data
+
+## Target Audience
+
+Israeli parents and families looking for children's entertainment including:
+- Theater shows for kids
+- Musical performances
+- Puppet shows
+- Children's festivals
+- Family entertainment events
+
+## Data Sources
+
+- Event data: Bravo ticketing platform (https://bravo.ticketsnow.co.il)
+- Videos: YouTube Data API
+- Competitor prices: Google Custom Search
+
+## Contact
+
+Website: https://kids.ticketsnow.co.il
+Parent site: https://ticketsnow.co.il
+
+## Language
+
+Primary: Hebrew (he-IL)
+Direction: Right-to-left (RTL)
+
+## Update Frequency
+
+- Events: Daily sync at 02:00 UTC
+- Competitor links: Cached for 7 days
+- YouTube videos: Cached for 24 hours

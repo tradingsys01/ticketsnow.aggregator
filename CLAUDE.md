@@ -87,7 +87,7 @@ Bravo JSON Feed → Events Service → Database (SQLite/PostgreSQL)
 - **Database**: Prisma ORM with SQLite (dev) → PostgreSQL (prod)
 - **Styling**: Tailwind CSS (RTL configured)
 - **APIs**: Google Custom Search, YouTube Data API v3
-- **Hosting**: Vercel (with cron jobs)
+- **Hosting**: Custom server (prdr) with crontab
 
 ## Database Schema
 
@@ -206,18 +206,35 @@ When investigating problems:
 
 ## Deployment
 
-**Platform**: Vercel
+**Platform**: Custom server (prdr) via SSH
 
-**Cron Setup**: vercel.json with daily schedule at 02:00 UTC
+**Server Path**: `/home/appuser/apps/kids.ticketsnow.co.il`
 
-**Domain**: kids.ticketsnow.co.il (custom domain in Vercel settings)
+**Cron Setup**: System crontab with daily schedule at 02:00 UTC
+- Deploy script: `./scripts/deploy-to-prdr.sh`
+- Cron script: `scripts/cron-sync-events.sh`
 
-**Production Database**: Switch `DATABASE_URL` to PostgreSQL connection string
+**Domain**: kids.ticketsnow.co.il
+
+**Production Database**: PostgreSQL (configured in `.env` on server)
+
+**Logs**: `/home/appuser/apps/kids.ticketsnow.co.il/logs/`
+
+**Deploy Commands**:
+```bash
+# Deploy cron jobs and scripts
+./scripts/deploy-to-prdr.sh
+
+# Manual sync test
+ssh prdr
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  https://kids.ticketsnow.co.il/api/cron/daily-sync
+```
 
 **Post-Deploy**:
 1. Submit sitemap.xml to Google Search Console
 2. Test Schema.org with Google Rich Results Test
-3. Verify cron job execution in Vercel logs
+3. Check logs: `ssh prdr && tail -f /home/appuser/apps/kids.ticketsnow.co.il/logs/cron.log`
 
 ## Reference Documentation
 

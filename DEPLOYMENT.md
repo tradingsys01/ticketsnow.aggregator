@@ -1,14 +1,18 @@
 # Production Deployment Guide
 
+## Platform: Custom Server (prdr)
+
+Deployment is via SSH to the prdr server, not Vercel.
+
 ## Pre-Deployment Checklist
 
 ### 1. Environment Variables
 
-Set these in Vercel Dashboard → Settings → Environment Variables:
+Set these in `/home/appuser/apps/kids.ticketsnow.co.il/.env` on prdr server:
 
 ```bash
 # Required
-DATABASE_URL="<production-postgres-url>"
+DATABASE_URL="postgresql://user:password@host:5432/database?schema=public"
 CRON_SECRET="<generate-with-openssl-rand-base64-32>"
 NEXT_PUBLIC_SITE_URL="https://kids.ticketsnow.co.il"
 
@@ -21,6 +25,14 @@ YOUTUBE_API_KEY="<youtube-api-key>"
 
 # Source Data
 BRAVO_JSON_URL="https://bravo.ticketsnow.co.il/xml/partner/shows.json"
+
+# Gmail API (for email reports)
+EMAIL_PROVIDER=gmail
+EMAIL_FROM=gshoihet@gmail.com
+EMAIL_TO=gshoihet@gmail.com
+GMAIL_CLIENT_ID="<client-id>"
+GMAIL_CLIENT_SECRET="<client-secret>"
+GMAIL_REFRESH_TOKEN="<refresh-token>"
 ```
 
 ### 2. Generate Production Secrets
@@ -28,21 +40,16 @@ BRAVO_JSON_URL="https://bravo.ticketsnow.co.il/xml/partner/shows.json"
 ```bash
 # Generate CRON_SECRET
 openssl rand -base64 32
-
-# Example output: Kj7x9pQmN4vL2wR8tY6uI1oE3sA5gH0z...
 ```
 
-### 3. Upload Google Service Account
-
-Ensure `google-service-account.json` is in project root and will be deployed.
-
-### 4. Database Setup
-
-If using PostgreSQL (recommended for production):
+### 3. Database Setup
 
 ```bash
-# Update DATABASE_URL in .env
-DATABASE_URL="postgresql://user:password@host:5432/database?schema=public"
+# SSH to production
+ssh prdr
+
+# Navigate to app directory
+cd /home/appuser/apps/kids.ticketsnow.co.il
 
 # Run migrations
 npx prisma migrate deploy
@@ -57,30 +64,64 @@ curl -H "Authorization: Bearer <CRON_SECRET>" \
 
 ## Deployment Steps
 
-### Option 1: Deploy via Vercel CLI
+### Option 1: Deploy via Script (Recommended)
 
 ```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Login to Vercel
-vercel login
-
-# Deploy to production
-vercel --prod
+# From local development machine
+./scripts/deploy-to-prdr.sh
 ```
 
-### Option 2: Deploy via Git Integration
+This script will:
+1. Test SSH connection to prdr
+2. Create remote directories
+3. Deploy cron scripts
+4. Configure crontab with Gmail reporting
+
+### Option 2: Manual Deployment
 
 ```bash
-# Commit all changes
-git add .
-git commit -m "Production deployment"
+# SSH to production
+ssh prdr
 
-# Push to main branch
-git push origin main
+# Navigate to app directory
+cd /home/appuser/apps/kids.ticketsnow.co.il
 
-# Vercel will auto-deploy
+# Pull latest code
+git pull origin main
+
+# Install dependencies
+npm ci
+
+# Build for production
+npm run build
+
+# Restart the application (using PM2 or systemd)
+pm2 restart kids-ticketsnow
+# OR
+sudo systemctl restart kids-ticketsnow
+```
+
+### Deploy Cron Jobs Only
+
+```bash
+# Copy cron script to server
+scp scripts/cron-sync-events.sh prdr:/home/appuser/apps/kids.ticketsnow.co.il/scripts/
+
+# Make executable
+ssh prdr "chmod +x /home/appuser/apps/kids.ticketsnow.co.il/scripts/cron-sync-events.sh"
+
+# Edit crontab on server
+ssh prdr
+crontab -e
+```
+
+Add to crontab:
+```cron
+# Daily sync at 02:00 UTC
+0 2 * * * /home/appuser/apps/kids.ticketsnow.co.il/scripts/cron-sync-events.sh >> /home/appuser/apps/kids.ticketsnow.co.il/logs/cron.log 2>&1
+
+# Weekly log cleanup
+0 3 * * 0 find /home/appuser/apps/kids.ticketsnow.co.il/logs -name "cron-sync-*.log" -mtime +30 -delete
 ```
 
 ## Post-Deployment Verification
@@ -115,109 +156,73 @@ curl https://kids.ticketsnow.co.il/api/cron/status
 
 Visit: `https://kids.ticketsnow.co.il/event/<any-event-slug>`
 
-**Expected**: Event details with images, venue, date, competitor links
-
 ### 4. Verify Sitemap
 
 ```bash
 curl https://kids.ticketsnow.co.il/sitemap.xml
 ```
 
-**Expected**: XML with all event URLs
+**Expected**: XML with all event URLs using `https://kids.ticketsnow.co.il`
 
-### 5. Test Cron Job
+### 5. Test Cron Job Manually
 
 ```bash
+ssh prdr
 curl -X POST \
   -H "Authorization: Bearer <CRON_SECRET>" \
   https://kids.ticketsnow.co.il/api/cron/daily-sync
 ```
 
-**Expected**:
-```json
-{
-  "success": true,
-  "duration": "80.65s",
-  "eventSync": {...},
-  "competitorSearch": {...}
-}
+## Monitoring
+
+### Check Logs
+
+```bash
+# SSH to server
+ssh prdr
+
+# View latest sync log
+tail -f /home/appuser/apps/kids.ticketsnow.co.il/logs/cron-sync-$(date +%Y%m%d).log
+
+# View combined cron log
+tail -f /home/appuser/apps/kids.ticketsnow.co.il/logs/cron.log
 ```
 
-## Monitoring Setup
+### Log Files Location
 
-### 1. Vercel Dashboard Monitoring
-
-1. Go to Vercel Dashboard → Your Project
-2. Navigate to "Cron Jobs" tab
-3. Verify schedule: "0 2 * * *" (Daily at 2:00 AM)
-4. Check execution history
-
-### 2. Set Up Failure Notifications
-
-1. Vercel Dashboard → Settings → Notifications
-2. Enable "Cron Job Failures"
-3. Add notification channels:
-   - Email
-   - Slack webhook
-   - Discord webhook
-
-### 3. Create Status Monitoring Cron
-
-Add to your monitoring tool (e.g., UptimeRobot):
-
-- **URL**: `https://kids.ticketsnow.co.il/api/cron/status`
-- **Interval**: Every 5 minutes
-- **Alert if**: Response time > 5s OR status != 200
-
-### 4. Log Monitoring
-
-In Vercel Dashboard → Logs, set up filters:
-- **Error logs**: Filter for "❌" or "error"
-- **Sync logs**: Filter for "🚀 Starting daily sync"
-- **Quota warnings**: Filter for "quota exceeded"
-
-## Cron Job Configuration
-
-Current schedule in `vercel.json`:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/daily-sync",
-      "schedule": "0 2 * * *"
-    }
-  ]
-}
+```
+/home/appuser/apps/kids.ticketsnow.co.il/logs/
+├── cron-sync-YYYYMMDD.log  # Daily sync logs
+├── cron.log                 # Combined cron output
+└── cleanup.log              # Log rotation output
 ```
 
-**To change schedule**:
+### Monitoring Checklist
 
-```json
-{
-  "schedule": "0 */6 * * *"  // Every 6 hours
-}
-{
-  "schedule": "0 0 * * 0"    // Every Sunday at midnight
-}
-{
-  "schedule": "*/15 * * * *" // Every 15 minutes (not recommended)
-}
-```
+**Daily (automated)**:
+- Cron job execution status
+- Event sync success/failure
+- Quota usage percentage
+
+**Weekly (manual)**:
+- Review sync success rate
+- Check database size
+- Verify event count matches Bravo
 
 ## Troubleshooting
 
 ### Cron Job Not Running
 
 **Check**:
-1. Vercel Dashboard → Cron Jobs → Execution history
-2. Verify `vercel.json` is deployed
-3. Check environment variable `CRON_SECRET` is set
+```bash
+ssh prdr
+crontab -l | grep kids.ticketsnow
+```
 
 **Solution**:
 ```bash
-# Redeploy
-vercel --prod --force
+# Reinstall crontab
+./scripts/deploy-to-prdr.sh
 
 # Or trigger manually
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
@@ -229,186 +234,68 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
 **Problem**: CRON_SECRET mismatch
 
 **Solution**:
-1. Check Vercel environment variables
-2. Regenerate secret:
-   ```bash
-   openssl rand -base64 32
-   ```
-3. Update in Vercel Dashboard
-4. Redeploy
+1. Check `.env` on server: `ssh prdr && cat /home/appuser/apps/kids.ticketsnow.co.il/.env | grep CRON_SECRET`
+2. Regenerate if needed: `openssl rand -base64 32`
+3. Update `.env` on server
+4. Restart application
 
 ### Database Connection Errors
 
-**Problem**: DATABASE_URL incorrect or database not accessible
-
 **Solution**:
-1. Verify DATABASE_URL format:
-   ```
-   postgresql://user:password@host:5432/dbname?schema=public
-   ```
-2. Check database is running and accessible
-3. Run migrations:
-   ```bash
-   npx prisma migrate deploy
-   ```
+```bash
+ssh prdr
+cd /home/appuser/apps/kids.ticketsnow.co.il
+npx prisma migrate deploy
+```
 
 ### Google API Quota Exceeded
 
-**Problem**: Too many competitor searches
-
-**Solution**:
-1. Check daily usage:
-   ```bash
-   curl https://kids.ticketsnow.co.il/api/cron/status
-   ```
-2. View `quota.dailyQueryCount`
-3. Options:
-   - Wait for quota reset (midnight PT)
-   - Increase cache TTL in `competitor.service.ts`
-   - Reduce priority threshold (30 days → 14 days)
-   - Add multiple API keys
-
-### Events Not Showing
-
-**Problem**: Bravo API down or data format changed
-
-**Solution**:
-1. Test Bravo API:
-   ```bash
-   curl https://bravo.ticketsnow.co.il/xml/partner/shows.json
-   ```
-2. Check logs in Vercel Dashboard
-3. Review `events.service.ts` for API changes
-4. Manual sync:
-   ```bash
-   curl -H "Authorization: Bearer $CRON_SECRET" \
-     https://kids.ticketsnow.co.il/api/cron/daily-sync
-   ```
-
-## Performance Optimization
-
-### 1. Enable ISR (Incremental Static Regeneration)
-
-Add to event pages:
-
-```typescript
-// src/app/event/[slug]/page.tsx
-export const revalidate = 3600 // Revalidate every hour
+**Check**:
+```bash
+curl https://kids.ticketsnow.co.il/api/cron/status | jq '.quota'
 ```
 
-### 2. Image Optimization
+**Solution**: Wait for quota reset (midnight PT) or adjust cache TTL
 
-Already using Next.js Image component with automatic optimization.
+## Server Details
 
-### 3. Database Indexing
-
-Already indexed in Prisma schema:
-- Event.slug (unique index)
-- Event.date (for sorting)
-- CompetitorMatch.eventId + competitorName (compound index)
-
-### 4. Caching Strategy
-
-- **Static Generation**: All event pages pre-rendered at build
-- **Competitor Matches**: Cached for 7 days
-- **CDN**: Vercel Edge Network caches static assets
+| Setting | Value |
+|---------|-------|
+| SSH Host | `prdr` |
+| App Directory | `/home/appuser/apps/kids.ticketsnow.co.il` |
+| Logs Directory | `/home/appuser/apps/kids.ticketsnow.co.il/logs` |
+| Scripts Directory | `/home/appuser/apps/kids.ticketsnow.co.il/scripts` |
+| Cron Schedule | Daily at 02:00 UTC |
+| Domain | kids.ticketsnow.co.il |
 
 ## Security Checklist
 
-- ✅ CRON_SECRET in environment variables (not in code)
-- ✅ Database credentials in environment variables
-- ✅ Google service account not committed to git
-- ✅ API authentication on sensitive endpoints
-- ✅ No sensitive data in client-side code
-- ✅ HTTPS enforced (Vercel default)
-
-## Backup & Recovery
-
-### Database Backups
-
-If using Vercel Postgres:
-- Automatic daily backups
-- Point-in-time recovery available
-- Retention: 7 days (Hobby), 30 days (Pro)
-
-If using external database:
-- Set up automated backups
-- Test restore procedure
-- Keep backups for 30+ days
-
-### Manual Backup
-
-```bash
-# Export database
-pg_dump $DATABASE_URL > backup_$(date +%Y%m%d).sql
-
-# Restore
-psql $DATABASE_URL < backup_20250122.sql
-```
-
-### Sync Log Recovery
-
-If sync logs are lost:
-```bash
-# Trigger fresh sync
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  https://kids.ticketsnow.co.il/api/cron/daily-sync
-```
+- CRON_SECRET in environment variables (not in code)
+- Database credentials in environment variables
+- Google service account not committed to git
+- API authentication on sensitive endpoints
+- No sensitive data in client-side code
+- HTTPS enforced
 
 ## Rollback Procedure
 
-If deployment fails:
-
 ```bash
-# Option 1: Revert via Vercel Dashboard
-# Deployments → Previous deployment → Promote to Production
+ssh prdr
+cd /home/appuser/apps/kids.ticketsnow.co.il
 
-# Option 2: Revert via Git
-git revert HEAD
-git push origin main
+# Revert to previous commit
+git log --oneline -5  # Find previous commit
+git checkout <commit-hash>
 
-# Option 3: Redeploy previous commit
-vercel --prod --force
+# Rebuild
+npm run build
+
+# Restart
+pm2 restart kids-ticketsnow
 ```
 
-## Monitoring Checklist
+## Support
 
-Daily (automated):
-- ✅ Cron job execution status
-- ✅ Event sync success/failure
-- ✅ Quota usage percentage
-- ✅ Error logs
-
-Weekly (manual):
-- ✅ Review sync success rate
-- ✅ Check database size
-- ✅ Verify event count matches Bravo
-- ✅ Review competitor match quality
-
-Monthly (manual):
-- ✅ Review performance metrics
-- ✅ Check for outdated dependencies
-- ✅ Audit security vulnerabilities
-- ✅ Review and clean old logs
-
-## Support Contacts
-
-- **Vercel Support**: https://vercel.com/support
-- **Next.js Docs**: https://nextjs.org/docs
-- **Prisma Docs**: https://www.prisma.io/docs
-- **Google Cloud Support**: https://cloud.google.com/support
-
-## Additional Resources
-
-- [Vercel Cron Jobs Documentation](https://vercel.com/docs/cron-jobs)
-- [Next.js Deployment Documentation](https://nextjs.org/docs/deployment)
-- [Prisma Production Best Practices](https://www.prisma.io/docs/guides/performance-and-optimization/production-best-practices)
-
----
-
-**Ready for Production** ✓
-
-For questions or issues, check:
-1. Vercel Dashboard logs
-2. `/api/cron/status` endpoint
-3. Phase completion docs (PHASE_8_COMPLETED.md, PHASE_9_COMPLETED.md)
+- **Status Endpoint**: https://kids.ticketsnow.co.il/api/cron/status
+- **Logs**: `ssh prdr && tail -f /home/appuser/apps/kids.ticketsnow.co.il/logs/cron.log`
+- **Detailed Docs**: See `DEPLOYMENT_SUMMARY.md` and `scripts/README.md`
