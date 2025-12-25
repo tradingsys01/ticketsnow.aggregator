@@ -32,10 +32,10 @@ function getGoogleAuth(): GoogleAuth {
 
 // Competitor sites to search
 const COMPETITORS = [
-  { name: 'Ticketmaster', domain: 'ticketmaster.co.il' },
-  { name: 'Eventim', domain: 'eventim.co.il' },
+  { name: 'Ticketsi', domain: 'ticketsi.co.il' },
   { name: 'Eventer', domain: 'eventer.co.il' },
-  { name: 'Leaan', domain: 'leaan.co.il' }
+  { name: 'Leaan', domain: 'leaan.co.il' },
+  { name: 'Eventim', domain: 'eventim.co.il' }
 ]
 
 interface SearchResult {
@@ -146,9 +146,15 @@ export function calculateMatchScore(result: SearchResult, event: Partial<Event>)
     score += 0.1
   }
 
-  // Require at least 2 matching criteria for a valid match
-  if (matchedCriteria < 2 && score < 0.5) {
+  // Require reasonable confidence: 2+ criteria OR decent score with event URL
+  if (matchedCriteria < 2 && score < 0.35) {
     console.log(`Low confidence match (${matchedCriteria} criteria, score ${score}): ${url}`)
+    return 0.0
+  }
+
+  // For single criteria matches, require it to be an event URL
+  if (matchedCriteria === 1 && !isEventUrl(url) && score < 0.5) {
+    console.log(`Single criteria non-event URL (${matchedCriteria} criteria, score ${score}): ${url}`)
     return 0.0
   }
 
@@ -331,8 +337,8 @@ export async function findCompetitorMatches(event: Event) {
       for (const result of searchResults) {
         const score = calculateMatchScore(result, event)
 
-        // Only keep results with good match score (0.5+)
-        if (score >= 0.5) {
+        // Only keep results with reasonable match score (0.35+)
+        if (score >= 0.35) {
           results.push({
             competitorName: competitor.name,
             competitorUrl: result.link,
