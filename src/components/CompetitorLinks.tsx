@@ -68,7 +68,7 @@ export default async function CompetitorLinks({ eventId, eventName }: Competitor
               key={index}
               href={competitor.url}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="nofollow noopener noreferrer"
               className="block p-4 bg-gradient-to-l from-blue-50 to-purple-50 rounded-xl hover:shadow-md transition-all border-2 border-transparent hover:border-blue-400"
             >
               <div className="flex items-start justify-between gap-3">
