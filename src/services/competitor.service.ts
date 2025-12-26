@@ -32,7 +32,6 @@ function getGoogleAuth(): GoogleAuth {
 
 // Competitor sites to search
 const COMPETITORS = [
-  { name: 'Ticketsi', domain: 'ticketsi.co.il' },
   { name: 'Eventer', domain: 'eventer.co.il' },
   { name: 'Leaan', domain: 'leaan.co.il' },
   { name: 'Eventim', domain: 'eventim.co.il' }
@@ -42,6 +41,41 @@ interface SearchResult {
   title: string
   snippet: string
   link: string
+}
+
+// Debug log entry for API requests
+export interface ApiDebugLog {
+  timestamp: string
+  service: 'google_search' | 'youtube_search' | 'youtube_comments'
+  eventName?: string
+  query: string
+  domain?: string
+  status: 'success' | 'error' | 'no_results' | 'quota_exceeded'
+  resultsCount: number
+  matchesAccepted: number
+  error?: string
+  results?: Array<{
+    title: string
+    url: string
+    score?: number
+    accepted: boolean
+    rejectReason?: string
+  }>
+}
+
+// Global debug log collector for current sync
+let currentSyncDebugLogs: ApiDebugLog[] = []
+
+export function clearDebugLogs(): void {
+  currentSyncDebugLogs = []
+}
+
+export function getDebugLogs(): ApiDebugLog[] {
+  return currentSyncDebugLogs
+}
+
+function addDebugLog(log: ApiDebugLog): void {
+  currentSyncDebugLogs.push(log)
 }
 
 /**
@@ -163,13 +197,28 @@ export function calculateMatchScore(result: SearchResult, event: Partial<Event>)
 
 /**
  * Search Google for a specific competitor site
+ * Returns results along with debug info
  */
 async function searchCompetitorSite(
   query: string,
-  competitorDomain: string
-): Promise<SearchResult[]> {
+  competitorDomain: string,
+  eventName: string
+): Promise<{ results: SearchResult[], debugInfo: Partial<ApiDebugLog> }> {
+  const debugInfo: Partial<ApiDebugLog> = {
+    timestamp: new Date().toISOString(),
+    service: 'google_search',
+    eventName,
+    query,
+    domain: competitorDomain,
+    resultsCount: 0,
+    matchesAccepted: 0,
+    results: []
+  }
+
   if (!GOOGLE_SEARCH_ENGINE_ID) {
-    throw new Error('Google Search Engine ID not configured')
+    debugInfo.status = 'error'
+    debugInfo.error = 'Google Search Engine ID not configured'
+    return { results: [], debugInfo }
   }
 
   try {
@@ -179,7 +228,9 @@ async function searchCompetitorSite(
     const accessToken = await client.getAccessToken()
 
     if (!accessToken.token) {
-      throw new Error('Failed to get access token')
+      debugInfo.status = 'error'
+      debugInfo.error = 'Failed to get access token'
+      return { results: [], debugInfo }
     }
 
     const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
@@ -196,20 +247,29 @@ async function searchCompetitorSite(
     })
 
     if (response.data.items && Array.isArray(response.data.items)) {
-      return response.data.items.map((item: any) => ({
+      const results = response.data.items.map((item: any) => ({
         title: item.title || '',
         snippet: item.snippet || '',
         link: item.link || ''
       }))
+      debugInfo.resultsCount = results.length
+      debugInfo.status = results.length > 0 ? 'success' : 'no_results'
+      // Results will be scored and populated by the caller
+      return { results, debugInfo }
     }
 
-    return []
+    debugInfo.status = 'no_results'
+    return { results: [], debugInfo }
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 429) {
+      debugInfo.status = 'quota_exceeded'
+      debugInfo.error = 'Google API quota exceeded'
       throw new Error('Google API quota exceeded')
     }
+    debugInfo.status = 'error'
+    debugInfo.error = error instanceof Error ? error.message : 'Unknown error'
     console.error(`Error searching ${competitorDomain}:`, error)
-    return []
+    return { results: [], debugInfo }
   }
 }
 
@@ -330,12 +390,25 @@ export async function findCompetitorMatches(event: Event) {
   // Search each competitor site
   for (const competitor of COMPETITORS) {
     try {
-      const searchResults = await searchCompetitorSite(searchTerms, competitor.domain)
+      const { results: searchResults, debugInfo } = await searchCompetitorSite(
+        searchTerms,
+        competitor.domain,
+        event.name
+      )
       queriesUsed++
+
+      // Track results for debug log
+      const debugResults: ApiDebugLog['results'] = []
+      let matchesAccepted = 0
 
       // Score and filter results
       for (const result of searchResults) {
         const score = calculateMatchScore(result, event)
+        const isGeneric = isGenericUrl(result.link)
+        const isEvent = isEventUrl(result.link)
+
+        let accepted = false
+        let rejectReason: string | undefined
 
         // Only keep results with reasonable match score (0.35+)
         if (score >= 0.35) {
@@ -345,14 +418,47 @@ export async function findCompetitorMatches(event: Event) {
             matchScore: score
           })
           console.log(`✓ Match found: ${competitor.name} (score: ${score.toFixed(2)}) - ${result.link}`)
+          accepted = true
+          matchesAccepted++
+        } else if (score === 0 && isGeneric) {
+          rejectReason = 'Generic URL rejected'
+        } else if (score < 0.35) {
+          rejectReason = `Score too low (${score.toFixed(2)})`
         }
+
+        debugResults.push({
+          title: result.title,
+          url: result.link,
+          score,
+          accepted,
+          rejectReason
+        })
       }
+
+      // Add debug log entry
+      addDebugLog({
+        ...debugInfo,
+        matchesAccepted,
+        results: debugResults
+      } as ApiDebugLog)
 
       // Small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 200))
 
     } catch (error) {
       console.error(`Failed to search ${competitor.name}:`, error)
+      // Log the error
+      addDebugLog({
+        timestamp: new Date().toISOString(),
+        service: 'google_search',
+        eventName: event.name,
+        query: searchTerms,
+        domain: competitor.domain,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        resultsCount: 0,
+        matchesAccepted: 0
+      })
     }
   }
 

@@ -4,6 +4,22 @@ import type { Event } from '@prisma/client'
 import { GoogleAuth } from 'google-auth-library'
 import * as fs from 'fs'
 import * as path from 'path'
+import { ApiDebugLog, getDebugLogs } from './competitor.service'
+
+// YouTube debug log collector (uses same interface)
+let youtubeDebugLogs: ApiDebugLog[] = []
+
+export function clearYouTubeDebugLogs(): void {
+  youtubeDebugLogs = []
+}
+
+export function getYouTubeDebugLogs(): ApiDebugLog[] {
+  return youtubeDebugLogs
+}
+
+function addYouTubeDebugLog(log: ApiDebugLog): void {
+  youtubeDebugLogs.push(log)
+}
 
 const GOOGLE_SERVICE_ACCOUNT_PATH = process.env.GOOGLE_SERVICE_ACCOUNT_PATH
 const CACHE_DURATION_HOURS = 24
@@ -420,53 +436,91 @@ export async function findEventVideos(event: Event): Promise<YouTubeVideo[]> {
     'הצגה ילדים'
   ].filter(Boolean).join(' ')
 
-  // Search YouTube (primary channel first, then fallback to general search)
-  const allVideos = await searchYouTubeWithFallback(searchTerms)
-
-  // Filter relevant videos
-  const relevantVideos = filterRelevantVideos(allVideos, event)
-
-  // Filter out Shorts and deduplicate by title (keep longest video)
-  const finalVideos = await filterOutShorts(relevantVideos)
-
-  console.log(`Found ${finalVideos.length} videos (${allVideos.length} total, ${relevantVideos.length} relevant, filtered ${relevantVideos.length - finalVideos.length} shorts)`)
-
-  // Cache results for 24 hours
-  const expiresAt = new Date()
-  expiresAt.setHours(expiresAt.getHours() + CACHE_DURATION_HOURS)
-
-  // Save to database
-  for (const video of finalVideos) {
-    try {
-      await prisma.youTubeVideo.upsert({
-        where: {
-          eventId_videoId: {
-            eventId: event.id,
-            videoId: video.videoId
-          }
-        },
-        create: {
-          eventId: event.id,
-          videoId: video.videoId,
-          title: video.title,
-          thumbnailUrl: video.thumbnailUrl,
-          channelTitle: video.channelTitle,
-          expiresAt
-        },
-        update: {
-          title: video.title,
-          thumbnailUrl: video.thumbnailUrl,
-          channelTitle: video.channelTitle,
-          expiresAt,
-          checkedAt: new Date()
-        }
-      })
-    } catch (error) {
-      console.error('Error caching YouTube video:', error)
-    }
+  // Debug log entry
+  const debugLog: ApiDebugLog = {
+    timestamp: new Date().toISOString(),
+    service: 'youtube_search',
+    eventName: event.name,
+    query: searchTerms,
+    status: 'success',
+    resultsCount: 0,
+    matchesAccepted: 0,
+    results: []
   }
 
-  return finalVideos
+  try {
+    // Search YouTube (primary channel first, then fallback to general search)
+    const allVideos = await searchYouTubeWithFallback(searchTerms)
+
+    // Filter relevant videos
+    const relevantVideos = filterRelevantVideos(allVideos, event)
+
+    // Filter out Shorts and deduplicate by title (keep longest video)
+    const finalVideos = await filterOutShorts(relevantVideos)
+
+    console.log(`Found ${finalVideos.length} videos (${allVideos.length} total, ${relevantVideos.length} relevant, filtered ${relevantVideos.length - finalVideos.length} shorts)`)
+
+    // Update debug log
+    debugLog.resultsCount = allVideos.length
+    debugLog.matchesAccepted = finalVideos.length
+    debugLog.status = allVideos.length > 0 ? 'success' : 'no_results'
+    debugLog.results = allVideos.map(v => ({
+      title: v.title,
+      url: `https://www.youtube.com/watch?v=${v.videoId}`,
+      accepted: finalVideos.some(fv => fv.videoId === v.videoId),
+      rejectReason: !relevantVideos.some(rv => rv.videoId === v.videoId)
+        ? 'Filtered as irrelevant'
+        : !finalVideos.some(fv => fv.videoId === v.videoId)
+          ? 'Filtered as Short or duplicate'
+          : undefined
+    }))
+
+    // Cache results for 24 hours
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + CACHE_DURATION_HOURS)
+
+    // Save to database
+    for (const video of finalVideos) {
+      try {
+        await prisma.youTubeVideo.upsert({
+          where: {
+            eventId_videoId: {
+              eventId: event.id,
+              videoId: video.videoId
+            }
+          },
+          create: {
+            eventId: event.id,
+            videoId: video.videoId,
+            title: video.title,
+            thumbnailUrl: video.thumbnailUrl,
+            channelTitle: video.channelTitle,
+            expiresAt
+          },
+          update: {
+            title: video.title,
+            thumbnailUrl: video.thumbnailUrl,
+            channelTitle: video.channelTitle,
+            expiresAt,
+            checkedAt: new Date()
+          }
+        })
+      } catch (error) {
+        console.error('Error caching YouTube video:', error)
+      }
+    }
+
+    addYouTubeDebugLog(debugLog)
+    return finalVideos
+
+  } catch (error) {
+    // Log error
+    debugLog.status = 'error'
+    debugLog.error = error instanceof Error ? error.message : 'Unknown error'
+    addYouTubeDebugLog(debugLog)
+    console.error('Error in findEventVideos:', error)
+    return []
+  }
 }
 
 /**

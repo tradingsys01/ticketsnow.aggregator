@@ -17,6 +17,26 @@ const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'gmail' // gmail, resend, s
 const GMAIL_USER = process.env.GMAIL_USER || ''
 const GMAIL_PWD = process.env.GMAIL_PWD || ''
 
+// API Debug log entry
+interface ApiDebugLogEntry {
+  timestamp: string
+  service: 'google_search' | 'youtube_search' | 'youtube_comments'
+  eventName?: string
+  query: string
+  domain?: string
+  status: 'success' | 'error' | 'no_results' | 'quota_exceeded'
+  resultsCount: number
+  matchesAccepted: number
+  error?: string
+  results?: Array<{
+    title: string
+    url: string
+    score?: number
+    accepted: boolean
+    rejectReason?: string
+  }>
+}
+
 interface SyncReportData {
   success: boolean
   timestamp: string
@@ -48,6 +68,7 @@ interface SyncReportData {
     topComments?: Array<{ video: string; author: string; text: string; likes: number }>
   }
   errors?: string[]
+  debugLogs?: ApiDebugLogEntry[]
 }
 
 /**
@@ -208,6 +229,63 @@ function generateEmailHTML(data: SyncReportData): string {
     ${data.errors.map(error => `
       <div style="padding: 10px; margin-bottom: 10px; background: white; border-right: 4px solid #ef4444; border-radius: 4px;">
         <code style="color: #991b1b; font-size: 14px;">${error}</code>
+      </div>
+    `).join('')}
+  </div>
+  ` : ''}
+
+  ${data.debugLogs && data.debugLogs.length > 0 ? `
+  <!-- Debug Logs Section -->
+  <div style="background: #f8fafc; border: 2px solid #94a3b8; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h3 style="margin: 0 0 15px 0; color: #475569; border-bottom: 2px solid #94a3b8; padding-bottom: 10px;">
+      🔧 Debug Logs - API Requests (${data.debugLogs.length})
+    </h3>
+
+    ${data.debugLogs.map(log => `
+      <div style="padding: 12px; margin-bottom: 12px; background: white; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-weight: bold; color: #1e293b;">
+            ${log.service === 'google_search' ? '🔍' : log.service === 'youtube_search' ? '🎥' : '💬'}
+            ${log.service === 'google_search' ? 'Google Search' : log.service === 'youtube_search' ? 'YouTube Search' : 'YouTube Comments'}
+            ${log.domain ? `→ ${log.domain}` : ''}
+          </span>
+          <span style="padding: 2px 8px; border-radius: 12px; font-size: 12px;
+            ${log.status === 'success' ? 'background: #dcfce7; color: #166534;' :
+              log.status === 'no_results' ? 'background: #fef3c7; color: #92400e;' :
+              log.status === 'quota_exceeded' ? 'background: #fce7f3; color: #9d174d;' :
+              'background: #fee2e2; color: #991b1b;'}">
+            ${log.status === 'success' ? 'Success' :
+              log.status === 'no_results' ? 'No Results' :
+              log.status === 'quota_exceeded' ? 'Quota Exceeded' : 'Error'}
+          </span>
+        </div>
+
+        <div style="font-size: 13px; color: #64748b; margin-bottom: 8px;">
+          <div><strong>Event:</strong> ${log.eventName || 'N/A'}</div>
+          <div><strong>Query:</strong> ${log.query.substring(0, 80)}${log.query.length > 80 ? '...' : ''}</div>
+          <div><strong>Results:</strong> ${log.resultsCount} found, ${log.matchesAccepted} accepted</div>
+          ${log.error ? `<div style="color: #dc2626;"><strong>Error:</strong> ${log.error}</div>` : ''}
+        </div>
+
+        ${log.results && log.results.length > 0 ? `
+          <details style="margin-top: 8px;">
+            <summary style="cursor: pointer; color: #3b82f6; font-size: 13px;">View ${log.results.length} results</summary>
+            <div style="margin-top: 8px; padding: 8px; background: #f1f5f9; border-radius: 4px; font-size: 12px;">
+              ${log.results.map(r => `
+                <div style="padding: 6px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0;">
+                  <div style="color: ${r.accepted ? '#166534' : '#991b1b'};">
+                    ${r.accepted ? '✓' : '✗'} ${r.title.substring(0, 60)}${r.title.length > 60 ? '...' : ''}
+                  </div>
+                  <div style="color: #64748b; font-size: 11px;">
+                    ${r.url.substring(0, 70)}${r.url.length > 70 ? '...' : ''}
+                    ${r.score !== undefined ? ` | Score: ${(r.score * 100).toFixed(0)}%` : ''}
+                    ${r.rejectReason ? ` | ${r.rejectReason}` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </details>
+        ` : ''}
       </div>
     `).join('')}
   </div>

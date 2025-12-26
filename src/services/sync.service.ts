@@ -10,8 +10,8 @@
 
 import prisma from '@/lib/db'
 import { syncEvents } from './events.service'
-import { processCompetitorSearchQueue } from './competitor.service'
-import { findEventVideos, getVideoComments } from './youtube.service'
+import { processCompetitorSearchQueue, clearDebugLogs, getDebugLogs } from './competitor.service'
+import { findEventVideos, getVideoComments, clearYouTubeDebugLogs, getYouTubeDebugLogs } from './youtube.service'
 import type { Event } from '@prisma/client'
 
 interface SyncStats {
@@ -330,6 +330,10 @@ async function getEmailReportData(stats: SyncStats): Promise<any> {
  */
 export async function runDailySync(): Promise<SyncStats> {
   const startTime = Date.now()
+
+  // Clear debug logs from previous runs
+  clearDebugLogs()
+  clearYouTubeDebugLogs()
 
   console.log('🚀 Starting comprehensive daily sync...')
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runDailySync, getEmailReportData } from '@/services/sync.service'
 import { sendSyncReport } from '@/services/email.service'
+import { getDebugLogs } from '@/services/competitor.service'
+import { getYouTubeDebugLogs } from '@/services/youtube.service'
 
 /**
  * Comprehensive Daily Sync Cron Job
@@ -70,6 +72,11 @@ export async function GET(request: NextRequest) {
     try {
       console.log('📧 Sending email report...')
       const emailData = await getEmailReportData(stats)
+
+      // Collect all debug logs
+      const allDebugLogs = [...getDebugLogs(), ...getYouTubeDebugLogs()]
+      console.log(`   Debug logs collected: ${allDebugLogs.length} entries`)
+
       await sendSyncReport({
         success: true,
         timestamp: new Date().toISOString(),
@@ -89,7 +96,8 @@ export async function GET(request: NextRequest) {
         youtubeComments: {
           ...stats.youtubeComments,
           topComments: emailData.topComments
-        }
+        },
+        debugLogs: allDebugLogs
       })
       console.log('✅ Email report sent successfully')
     } catch (emailError) {
@@ -110,6 +118,8 @@ export async function GET(request: NextRequest) {
     // Send error email report
     try {
       console.log('📧 Sending error email report...')
+      // Include any debug logs collected before the error
+      const allDebugLogs = [...getDebugLogs(), ...getYouTubeDebugLogs()]
       await sendSyncReport({
         success: false,
         timestamp: new Date().toISOString(),
@@ -118,7 +128,8 @@ export async function GET(request: NextRequest) {
         competitorSearch: { processed: 0, queriesUsed: 0, remaining: 0, matchesFound: 0 },
         youtubeVideos: { eventsProcessed: 0, videosFound: 0, cacheHits: 0 },
         youtubeComments: { videosProcessed: 0, commentsFetched: 0, cacheHits: 0 },
-        errors: [errorMessage]
+        errors: [errorMessage],
+        debugLogs: allDebugLogs
       })
       console.log('✅ Error email report sent')
     } catch (emailError) {
