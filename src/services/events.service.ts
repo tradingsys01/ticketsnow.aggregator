@@ -1,6 +1,7 @@
 import axios from 'axios'
 import prisma from '@/lib/db'
 import type { BravoEvent } from '@/types'
+import { getRelatedCities, getRegionName } from '@/lib/city-regions'
 
 const BRAVO_JSON_URL = process.env.BRAVO_JSON_URL || 'https://bravo.ticketsnow.co.il/xml/partner/shows.json'
 
@@ -323,9 +324,16 @@ export async function searchEvents(
     date: dateTo ? { gte: dateFrom, lte: dateTo } : { gte: dateFrom }
   }
 
-  // Add city filter
+  // Add city filter - expand to include related cities in the same region
   if (city) {
-    where.city = city
+    const relatedCities = getRelatedCities(city)
+    if (relatedCities.length > 1) {
+      // Multiple cities in the region - use IN filter
+      where.city = { in: relatedCities }
+    } else {
+      // Single city or no region match - exact match
+      where.city = city
+    }
   }
 
   // Add search terms
@@ -382,9 +390,16 @@ export async function getSearchResultsCount(
     date: dateTo ? { gte: dateFrom, lte: dateTo } : { gte: dateFrom }
   }
 
-  // Add city filter
+  // Add city filter - expand to include related cities in the same region
   if (city) {
-    where.city = city
+    const relatedCities = getRelatedCities(city)
+    if (relatedCities.length > 1) {
+      // Multiple cities in the region - use IN filter
+      where.city = { in: relatedCities }
+    } else {
+      // Single city or no region match - exact match
+      where.city = city
+    }
   }
 
   // Add search terms

@@ -1,4 +1,5 @@
 import type { Event } from '@prisma/client'
+import { getRegionName } from '@/lib/city-regions'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 const SITE_NAME = 'הצגות לילדים | kids.ticketsnow.co.il'
@@ -26,6 +27,8 @@ export function generateEventSchema(event: Event) {
       address: {
         '@type': 'PostalAddress',
         addressLocality: event.city,
+        // SEO/LLM: Include region for better geographic understanding
+        addressRegion: getRegionName(event.city) || 'ישראל',
         addressCountry: 'IL'
       }
     },
@@ -80,6 +83,11 @@ export function generateBreadcrumbSchema(items: Array<{ name: string; url: strin
  * Generate FAQ schema for event page
  */
 export function generateFAQSchema(event: Event) {
+  const region = getRegionName(event.city)
+  const locationText = region
+    ? `ב${event.venue}, ${event.city} (אזור ${region})`
+    : `ב${event.venue}, ${event.city}`
+
   const faqs = [
     {
       question: `מתי מתקיימת ההצגה ${event.name}?`,
@@ -87,7 +95,7 @@ export function generateFAQSchema(event: Event) {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
-      })} ב${event.venue}, ${event.city}.`
+      })} ${locationText}.`
     },
     {
       question: `איפה אפשר לקנות כרטיסים ל${event.name}?`,
