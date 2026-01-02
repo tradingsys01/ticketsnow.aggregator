@@ -146,6 +146,22 @@ export default function EventDetails({ event }: EventDetailsProps) {
           <li>• לפרטים מדויקים יש לפנות ישירות לאתר המוכר</li>
         </ul>
       </div>
+
+      {/* Event Metadata - for SEO and transparency */}
+      <div className="text-xs text-gray-500 border-t border-gray-200 pt-4 mt-4">
+        <div className="flex flex-wrap gap-4 justify-end" dir="ltr">
+          <span>
+            <time dateTime={event.createdAt.toISOString()}>
+              Added: {event.createdAt.toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' })}
+            </time>
+          </span>
+          <span>
+            <time dateTime={event.updatedAt.toISOString()}>
+              Updated: {event.updatedAt.toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </time>
+          </span>
+        </div>
+      </div>
     </div>
   )
 }

@@ -4,6 +4,14 @@ import { sendSyncReport } from '@/services/email.service'
 import { getDebugLogs } from '@/services/competitor.service'
 import { getYouTubeDebugLogs } from '@/services/youtube.service'
 
+// Disable caching for this endpoint
+export const dynamic = 'force-dynamic'
+
+// Prevent concurrent sync executions
+let syncInProgress = false
+let lastSyncTime = 0
+const MIN_SYNC_INTERVAL = 60000 // 1 minute minimum between syncs
+
 /**
  * Comprehensive Daily Sync Cron Job
  *
@@ -20,6 +28,26 @@ import { getYouTubeDebugLogs } from '@/services/youtube.service'
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
 
+  // Check if sync is already in progress or was run recently
+  if (syncInProgress) {
+    console.warn('⚠️ Sync already in progress, skipping duplicate request')
+    return NextResponse.json(
+      { error: 'Sync already in progress', skipped: true },
+      { status: 429 }
+    )
+  }
+
+  if (startTime - lastSyncTime < MIN_SYNC_INTERVAL) {
+    console.warn(`⚠️ Sync was run ${Math.round((startTime - lastSyncTime) / 1000)}s ago, skipping`)
+    return NextResponse.json(
+      { error: 'Sync was run recently', skipped: true, lastSyncSecondsAgo: Math.round((startTime - lastSyncTime) / 1000) },
+      { status: 429 }
+    )
+  }
+
+  syncInProgress = true
+  lastSyncTime = startTime
+
   try {
     // Authentication check
     const authHeader = request.headers.get('authorization')
@@ -27,6 +55,7 @@ export async function GET(request: NextRequest) {
 
     if (!cronSecret) {
       console.error('CRON_SECRET not configured')
+      syncInProgress = false
       return NextResponse.json(
         { error: 'Cron secret not configured' },
         { status: 500 }
@@ -38,6 +67,7 @@ export async function GET(request: NextRequest) {
 
     if (authHeader !== expectedAuth) {
       console.warn('Unauthorized cron job attempt')
+      syncInProgress = false
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -105,6 +135,7 @@ export async function GET(request: NextRequest) {
       // Don't fail the sync if email fails
     }
 
+    syncInProgress = false
     return NextResponse.json(result)
 
   } catch (error) {
@@ -136,6 +167,7 @@ export async function GET(request: NextRequest) {
       console.error('⚠️  Failed to send error email:', emailError)
     }
 
+    syncInProgress = false
     return NextResponse.json(
       {
         success: false,

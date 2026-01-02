@@ -8,7 +8,7 @@ import Filters from '@/components/Filters'
 import Pagination from '@/components/Pagination'
 import SchemaMarkup from '@/components/SchemaMarkup'
 import { generateItemListSchema } from '@/lib/schema'
-import { searchEvents, getSearchResultsCount, getUniqueCities } from '@/services/events.service'
+import { searchEvents, getSearchResultsCount, getUniqueCities, type EventSortOption } from '@/services/events.service'
 
 const ITEMS_PER_PAGE = 24
 
@@ -29,13 +29,20 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   const query = typeof searchParams.q === 'string' ? searchParams.q : ''
   const city = typeof searchParams.city === 'string' ? searchParams.city : ''
   const dateFilter = typeof searchParams.date === 'string' ? searchParams.date : ''
+  const sortParam = typeof searchParams.sort === 'string' ? searchParams.sort : 'date'
   const page = typeof searchParams.page === 'string' ? parseInt(searchParams.page) : 1
   const currentPage = Math.max(1, page)
   const offset = (currentPage - 1) * ITEMS_PER_PAGE
 
+  // Validate sort parameter
+  const validSorts: EventSortOption[] = ['date', 'date_desc', 'created', 'updated', 'name']
+  const sort: EventSortOption = validSorts.includes(sortParam as EventSortOption)
+    ? sortParam as EventSortOption
+    : 'date'
+
   // Fetch events, total count, and cities
   const [events, totalCount, cities] = await Promise.all([
-    searchEvents(query, ITEMS_PER_PAGE, offset, city, dateFilter),
+    searchEvents(query, ITEMS_PER_PAGE, offset, city, dateFilter, sort),
     getSearchResultsCount(query, city, dateFilter),
     getUniqueCities()
   ])

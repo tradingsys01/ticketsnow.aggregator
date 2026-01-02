@@ -10,12 +10,16 @@ export function generateEventSchema(event: Event) {
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'Event',
+    '@id': `${SITE_URL}/event/${event.slug}`,
     name: event.name,
     description: event.description || `הצגה לילדים: ${event.name}`,
     startDate: event.date.toISOString(),
     endDate: event.date.toISOString(),
     eventStatus: 'https://schema.org/EventScheduled',
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    // SEO/LLM: When this listing was created and last updated
+    dateCreated: event.createdAt.toISOString(),
+    dateModified: event.updatedAt.toISOString(),
     location: {
       '@type': 'Place',
       name: event.venue,

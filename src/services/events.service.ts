@@ -262,15 +262,39 @@ export async function getUpcomingEventsCount() {
   })
 }
 
+// Valid sort options for events
+export type EventSortOption = 'date' | 'date_desc' | 'created' | 'updated' | 'name'
+
 /**
- * Search events with pagination and filters
+ * Get orderBy clause based on sort option
+ */
+function getOrderBy(sort: EventSortOption) {
+  switch (sort) {
+    case 'date':
+      return { date: 'asc' as const }
+    case 'date_desc':
+      return { date: 'desc' as const }
+    case 'created':
+      return { createdAt: 'desc' as const }
+    case 'updated':
+      return { updatedAt: 'desc' as const }
+    case 'name':
+      return { name: 'asc' as const }
+    default:
+      return { date: 'asc' as const }
+  }
+}
+
+/**
+ * Search events with pagination, filters, and sorting
  */
 export async function searchEvents(
   query: string = '',
   limit: number = 20,
   offset: number = 0,
   city: string = '',
-  dateFilter: string = ''
+  dateFilter: string = '',
+  sort: EventSortOption = 'date'
 ) {
   const now = new Date()
   const searchTerms = query.trim().toLowerCase()
@@ -317,7 +341,7 @@ export async function searchEvents(
 
   return await prisma.event.findMany({
     where,
-    orderBy: { date: 'asc' },
+    orderBy: getOrderBy(sort),
     take: limit,
     skip: offset
   })

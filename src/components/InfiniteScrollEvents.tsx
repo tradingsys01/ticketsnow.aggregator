@@ -27,13 +27,14 @@ export default function InfiniteScrollEvents({
   const query = searchParams.get('q') || ''
   const city = searchParams.get('city') || ''
   const dateFilter = searchParams.get('date') || ''
+  const sort = searchParams.get('sort') || 'date'
 
   // Reset when filters change
   useEffect(() => {
     setEvents(initialEvents)
     setOffset(initialEvents.length)
     setHasMore(initialEvents.length < initialTotal)
-  }, [initialEvents, initialTotal, query, city, dateFilter])
+  }, [initialEvents, initialTotal, query, city, dateFilter, sort])
 
   // Fetch more events
   const loadMore = useCallback(async () => {
@@ -46,7 +47,8 @@ export default function InfiniteScrollEvents({
         offset: offset.toString(),
         ...(query && { q: query }),
         ...(city && { city }),
-        ...(dateFilter && { date: dateFilter })
+        ...(dateFilter && { date: dateFilter }),
+        ...(sort && sort !== 'date' && { sort })
       })
 
       const response = await fetch(`/api/events?${params}`)
@@ -64,7 +66,7 @@ export default function InfiniteScrollEvents({
     } finally {
       setLoading(false)
     }
-  }, [loading, hasMore, offset, itemsPerPage, query, city, dateFilter])
+  }, [loading, hasMore, offset, itemsPerPage, query, city, dateFilter, sort])
 
   // Intersection Observer for infinite scroll
   useEffect(() => {

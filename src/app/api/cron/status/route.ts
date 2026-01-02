@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { getDailyQueryCount } from '@/services/competitor.service'
 
+// Disable caching for this endpoint - always return fresh data
+export const dynamic = 'force-dynamic'
+
 /**
  * Cron Job Status & Monitoring Endpoint
  *

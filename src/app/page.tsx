@@ -6,7 +6,7 @@ import SearchBar from '@/components/SearchBar'
 import Filters from '@/components/Filters'
 import SchemaMarkup from '@/components/SchemaMarkup'
 import { generateItemListSchema } from '@/lib/schema'
-import { searchEvents, getSearchResultsCount, getUniqueCities } from '@/services/events.service'
+import { searchEvents, getSearchResultsCount, getUniqueCities, type EventSortOption } from '@/services/events.service'
 
 const ITEMS_PER_PAGE = 12
 
@@ -19,10 +19,17 @@ export default async function Home({ searchParams }: HomeProps) {
   const query = typeof searchParams.q === 'string' ? searchParams.q : ''
   const city = typeof searchParams.city === 'string' ? searchParams.city : ''
   const dateFilter = typeof searchParams.date === 'string' ? searchParams.date : ''
+  const sortParam = typeof searchParams.sort === 'string' ? searchParams.sort : 'date'
+
+  // Validate sort parameter
+  const validSorts: EventSortOption[] = ['date', 'date_desc', 'created', 'updated', 'name']
+  const sort: EventSortOption = validSorts.includes(sortParam as EventSortOption)
+    ? sortParam as EventSortOption
+    : 'date'
 
   // Fetch initial events (first page), total count, and cities
   const [events, totalCount, cities] = await Promise.all([
-    searchEvents(query, ITEMS_PER_PAGE, 0, city, dateFilter),
+    searchEvents(query, ITEMS_PER_PAGE, 0, city, dateFilter, sort),
     getSearchResultsCount(query, city, dateFilter),
     getUniqueCities()
   ])
